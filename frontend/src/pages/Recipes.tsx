@@ -56,9 +56,15 @@ export default function RecipesPage() {
             </div>
             <div className="mt-2 flex flex-wrap gap-1.5">
               {r.products.map((p) => (
-                <span key={p.id} className="bg-stone-100 text-xs px-2 py-1 rounded-full">
+                <span
+                  key={p.id}
+                  className={`text-xs px-2 py-1 rounded-full ${
+                    p.optional ? 'bg-amber-50 text-amber-700' : 'bg-stone-100'
+                  }`}
+                >
                   {p.quantity >= 2 ? `${p.quantity}× ` : ''}
                   {p.name}
+                  {p.optional ? ' (soms)' : ''}
                 </span>
               ))}
               {r.products.length === 0 && <span className="text-xs text-stone-400">Geen producten</span>}
@@ -80,7 +86,7 @@ function RecipeForm({ recipe, onClose }: { recipe: Recipe | null; onClose: () =>
     mutationFn: () => {
       const body = JSON.stringify({
         name,
-        items: products.map((p) => ({ product_id: p.id, quantity: p.quantity })),
+        items: products.map((p) => ({ product_id: p.id, quantity: p.quantity, optional: p.optional })),
       });
       return recipe
         ? api(`/recipes/${recipe.id}`, { method: 'PUT', body })
@@ -96,6 +102,10 @@ function RecipeForm({ recipe, onClose }: { recipe: Recipe | null; onClose: () =>
     setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, quantity } : p)));
   }
 
+  function toggleOptional(id: number) {
+    setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, optional: !p.optional } : p)));
+  }
+
   return (
     <div className="bg-white rounded-xl shadow p-4 space-y-3 border-2 border-emerald-200">
       <h2 className="font-bold">{recipe ? 'Recept bewerken' : 'Nieuw recept'}</h2>
@@ -108,7 +118,9 @@ function RecipeForm({ recipe, onClose }: { recipe: Recipe | null; onClose: () =>
       />
       <ProductPicker
         onPick={(p) =>
-          setProducts((prev) => (prev.some((x) => x.id === p.id) ? prev : [...prev, { ...p, quantity: 1 }]))
+          setProducts((prev) =>
+            prev.some((x) => x.id === p.id) ? prev : [...prev, { ...p, quantity: 1, optional: false }]
+          )
         }
         excludeIds={products.map((p) => p.id)}
       />
@@ -116,14 +128,28 @@ function RecipeForm({ recipe, onClose }: { recipe: Recipe | null; onClose: () =>
         {products.map((p) => (
           <span
             key={p.id}
-            className="bg-emerald-100 text-emerald-800 text-xs px-2 py-1 rounded-full flex items-center gap-1.5"
+            className={`text-xs px-2 py-1 rounded-full flex items-center gap-1.5 ${
+              p.optional ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
+            }`}
           >
             {p.name}
             <QtyControl value={p.quantity} onChange={(q) => setQty(p.id, q)} />
+            <button
+              onClick={() => toggleOptional(p.id)}
+              title="Soms nodig: bij het toevoegen aan een lijst wordt gevraagd of je dit nodig hebt"
+              className={`rounded-full px-1.5 font-semibold ${
+                p.optional ? 'bg-amber-200' : 'bg-white/70 text-stone-500'
+              }`}
+            >
+              soms
+            </button>
             <button onClick={() => setProducts((prev) => prev.filter((x) => x.id !== p.id))}>✕</button>
           </span>
         ))}
       </div>
+      <p className="text-xs text-stone-400">
+        "soms" = soms nodig: bij het toevoegen aan een lijst wordt gevraagd of je het moet kopen.
+      </p>
       <div className="flex gap-2 justify-end">
         <button onClick={onClose} className="px-4 py-2 text-sm text-stone-600">
           Annuleren

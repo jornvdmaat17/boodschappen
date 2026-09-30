@@ -23,6 +23,7 @@ export interface StoreCategory {
 
 export interface RecipeProduct extends Product {
   quantity: number;
+  optional: boolean;
 }
 
 export interface Recipe {

@@ -5,8 +5,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { useListRoom } from '../hooks/useSocket';
 import ProductPicker from '../components/ProductPicker';
+import OptionalItemsModal from '../components/OptionalItemsModal';
 import { DAY_NAMES } from '../types';
-import type { ShoppingListDetail, Recipe, ListItem } from '../types';
+import type { ShoppingListDetail, Recipe, ListItem, RecipeProduct } from '../types';
 
 export default function ListViewPage() {
   const { id } = useParams();
@@ -57,8 +58,11 @@ export default function ListViewPage() {
   });
 
   const addRecipe = useMutation({
-    mutationFn: (recipe_id: number) =>
-      api(`/shopping-lists/${listId}/recipes`, { method: 'POST', body: JSON.stringify({ recipe_id }) }),
+    mutationFn: ({ recipe_id, optional_include }: { recipe_id: number; optional_include: number[] }) =>
+      api(`/shopping-lists/${listId}/recipes`, {
+        method: 'POST',
+        body: JSON.stringify({ recipe_id, optional_include }),
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['list', listId] });
       setShowAddRecipe(false);
@@ -156,7 +160,9 @@ export default function ListViewPage() {
           <button onClick={() => setShowAddRecipe(!showAddRecipe)} className="text-sm text-emerald-700 font-medium">
             {showAddRecipe ? '− recept toevoegen' : '+ recept toevoegen'}
           </button>
-          {showAddRecipe && <RecipeAdder onAdd={(id) => addRecipe.mutate(id)} />}
+          {showAddRecipe && (
+            <RecipeAdder onAdd={(recipe_id, optional_include) => addRecipe.mutate({ recipe_id, optional_include })} />
+          )}
         </div>
       )}
 
@@ -241,16 +247,34 @@ function MealPlanEditor({
   disabled: boolean;
 }) {
   const queryClient = useQueryClient();
+  const [asking, setAsking] = useState<{ day: number; recipeId: number; products: RecipeProduct[] } | null>(
+    null
+  );
   const { data: recipes = [] } = useQuery<Recipe[]>({ queryKey: ['recipes'], queryFn: () => api('/recipes') });
 
   const updateDay = useMutation({
-    mutationFn: ({ day, recipe_id }: { day: number; recipe_id: number | null }) =>
+    mutationFn: ({
+      day,
+      recipe_id,
+      optional_include,
+    }: {
+      day: number;
+      recipe_id: number | null;
+      optional_include: number[];
+    }) =>
       api(`/shopping-lists/${listId}/meal-plan/${day}`, {
         method: 'PUT',
-        body: JSON.stringify({ recipe_id }),
+        body: JSON.stringify({ recipe_id, optional_include }),
       }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['list', listId] }),
   });
+
+  function changeDay(day: number, recipeId: number | null) {
+    const recipe = recipeId ? recipes.find((r) => r.id === recipeId) : null;
+    const optionals = recipe?.products.filter((p) => p.optional) ?? [];
+    if (recipeId && optionals.length > 0) setAsking({ day, recipeId, products: optionals });
+    else updateDay.mutate({ day, recipe_id: recipeId, optional_include: [] });
+  }
 
   const byDay = new Map(plan.map((d) => [d.day_of_week, d.recipe_id]));
 
@@ -262,9 +286,7 @@ function MealPlanEditor({
           <select
             value={byDay.get(day) ?? ''}
             disabled={disabled || updateDay.isPending}
-            onChange={(e) =>
-              updateDay.mutate({ day, recipe_id: e.target.value ? Number(e.target.value) : null })
-            }
+            onChange={(e) => changeDay(day, e.target.value ? Number(e.target.value) : null)}
             className="flex-1 min-w-0 border border-stone-200 rounded-lg px-2 py-1 text-sm"
           >
             <option value="">— geen —</option>
@@ -276,24 +298,52 @@ function MealPlanEditor({
           </select>
         </div>
       ))}
+      {asking && (
+        <OptionalItemsModal
+          products={asking.products}
+          onClose={() => setAsking(null)}
+          onConfirm={(ids) => {
+            updateDay.mutate({ day: asking.day, recipe_id: asking.recipeId, optional_include: ids });
+            setAsking(null);
+          }}
+        />
+      )}
     </div>
   );
 }
 
-function RecipeAdder({ onAdd }: { onAdd: (id: number) => void }) {
+function RecipeAdder({ onAdd }: { onAdd: (id: number, optionalInclude: number[]) => void }) {
+  const [asking, setAsking] = useState<{ recipeId: number; products: RecipeProduct[] } | null>(null);
   const { data: recipes = [] } = useQuery<Recipe[]>({ queryKey: ['recipes'], queryFn: () => api('/recipes') });
+
+  function pick(recipe: Recipe) {
+    const optionals = recipe.products.filter((p) => p.optional);
+    if (optionals.length > 0) setAsking({ recipeId: recipe.id, products: optionals });
+    else onAdd(recipe.id, []);
+  }
+
   return (
     <div className="flex flex-wrap gap-2">
       {recipes.map((r) => (
         <button
           key={r.id}
-          onClick={() => onAdd(r.id)}
+          onClick={() => pick(r)}
           className="px-3 py-1.5 bg-stone-100 rounded-lg text-sm hover:bg-emerald-100"
         >
           {r.name}
         </button>
       ))}
       {recipes.length === 0 && <p className="text-sm text-stone-500">Nog geen recepten.</p>}
+      {asking && (
+        <OptionalItemsModal
+          products={asking.products}
+          onClose={() => setAsking(null)}
+          onConfirm={(ids) => {
+            onAdd(asking.recipeId, ids);
+            setAsking(null);
+          }}
+        />
+      )}
     </div>
   );
 }

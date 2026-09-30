@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
 import ProductPicker from '../components/ProductPicker';
 import QtyControl from '../components/QtyControl';
+import OptionalItemsModal from '../components/OptionalItemsModal';
 import { DAY_NAMES } from '../types';
 import type { Recipe, Store, RecipeProduct } from '../types';
 
@@ -11,23 +12,35 @@ export default function WeeklyCreatePage() {
   const [storeId, setStoreId] = useState<number | ''>('');
   const [days, setDays] = useState<(number | null)[]>(Array(7).fill(null));
   const [newRecipeForDay, setNewRecipeForDay] = useState<number | null>(null);
+  const [askOptional, setAskOptional] = useState<RecipeProduct[] | null>(null);
   const navigate = useNavigate();
 
   const { data: stores = [] } = useQuery<Store[]>({ queryKey: ['stores'], queryFn: () => api('/stores') });
   const { data: recipes = [] } = useQuery<Recipe[]>({ queryKey: ['recipes'], queryFn: () => api('/recipes') });
 
   const createList = useMutation({
-    mutationFn: () =>
+    mutationFn: (optional_include: number[]) =>
       api('/shopping-lists', {
         method: 'POST',
         body: JSON.stringify({
           type: 'weekly',
           store_id: storeId,
           days: days.map((recipe_id, day_of_week) => ({ day_of_week, recipe_id })),
+          optional_include,
         }),
       }),
     onSuccess: (list: any) => navigate(`/list/${list.id}`),
   });
+
+  function generate() {
+    const selected = recipes.filter((r) => days.includes(r.id));
+    const optionals = new Map<number, RecipeProduct>();
+    for (const r of selected) {
+      for (const p of r.products) if (p.optional) optionals.set(p.id, p);
+    }
+    if (optionals.size > 0) setAskOptional([...optionals.values()]);
+    else createList.mutate([]);
+  }
 
   return (
     <div className="space-y-4">
@@ -98,8 +111,19 @@ export default function WeeklyCreatePage() {
         />
       )}
 
+      {askOptional && (
+        <OptionalItemsModal
+          products={askOptional}
+          onClose={() => setAskOptional(null)}
+          onConfirm={(ids) => {
+            setAskOptional(null);
+            createList.mutate(ids);
+          }}
+        />
+      )}
+
       <button
-        onClick={() => createList.mutate()}
+        onClick={generate}
         disabled={!storeId || createList.isPending}
         className="w-full bg-emerald-600 text-white rounded-xl py-3 font-medium hover:bg-emerald-700 disabled:opacity-40"
       >
@@ -123,7 +147,7 @@ function NewRecipeModal({ onClose, onCreated }: { onClose: () => void; onCreated
         method: 'POST',
         body: JSON.stringify({
           name,
-          items: products.map((p) => ({ product_id: p.id, quantity: p.quantity })),
+          items: products.map((p) => ({ product_id: p.id, quantity: p.quantity, optional: p.optional })),
         }),
       }),
     onSuccess: (recipe) => {
@@ -146,7 +170,9 @@ function NewRecipeModal({ onClose, onCreated }: { onClose: () => void; onCreated
         />
         <ProductPicker
           onPick={(p) =>
-            setProducts((prev) => (prev.some((x) => x.id === p.id) ? prev : [...prev, { ...p, quantity: 1 }]))
+            setProducts((prev) =>
+              prev.some((x) => x.id === p.id) ? prev : [...prev, { ...p, quantity: 1, optional: false }]
+            )
           }
           excludeIds={products.map((p) => p.id)}
         />
@@ -154,7 +180,9 @@ function NewRecipeModal({ onClose, onCreated }: { onClose: () => void; onCreated
           {products.map((p) => (
             <span
               key={p.id}
-              className="bg-emerald-100 text-emerald-800 text-xs px-2 py-1 rounded-full flex items-center gap-1.5"
+              className={`text-xs px-2 py-1 rounded-full flex items-center gap-1.5 ${
+                p.optional ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
+              }`}
             >
               {p.name}
               <QtyControl
@@ -163,6 +191,19 @@ function NewRecipeModal({ onClose, onCreated }: { onClose: () => void; onCreated
                   setProducts((prev) => prev.map((x) => (x.id === p.id ? { ...x, quantity: q } : x)))
                 }
               />
+              <button
+                onClick={() =>
+                  setProducts((prev) =>
+                    prev.map((x) => (x.id === p.id ? { ...x, optional: !x.optional } : x))
+                  )
+                }
+                title="Soms nodig"
+                className={`rounded-full px-1.5 font-semibold ${
+                  p.optional ? 'bg-amber-200' : 'bg-white/70 text-stone-500'
+                }`}
+              >
+                soms
+              </button>
               <button onClick={() => setProducts((prev) => prev.filter((x) => x.id !== p.id))}>✕</button>
             </span>
           ))}

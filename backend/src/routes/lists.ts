@@ -14,7 +14,7 @@ async function syncAutoItems(client: PoolClient, listId: number) {
        SELECT ri.product_id, ri.quantity FROM meal_plan_days mpd
          JOIN weekly_meal_plans wmp ON wmp.id = mpd.meal_plan_id
          JOIN recipe_items ri ON ri.recipe_id = mpd.recipe_id
-       WHERE wmp.shopping_list_id = $1
+       WHERE wmp.shopping_list_id = $1 AND NOT ri.optional
        UNION ALL
        SELECT product_id, quantity FROM recurring_items WHERE active = TRUE
      ) t GROUP BY product_id`,
@@ -48,8 +48,25 @@ listsRouter.get('/', async (_req, res) => {
   res.json(rows);
 });
 
+// Chosen "sometimes needed" recipe products are added as manual items so a
+// later meal-plan change neither removes nor re-adds them.
+async function addOptionalFromMealPlan(client: PoolClient, listId: number, productIds: number[]) {
+  if (productIds.length === 0) return;
+  await client.query(
+    `INSERT INTO shopping_list_items (shopping_list_id, product_id, source, quantity)
+     SELECT $1, ri.product_id, 'manual', SUM(ri.quantity)::int
+     FROM meal_plan_days mpd
+       JOIN weekly_meal_plans wmp ON wmp.id = mpd.meal_plan_id
+       JOIN recipe_items ri ON ri.recipe_id = mpd.recipe_id
+     WHERE wmp.shopping_list_id = $1 AND ri.optional AND ri.product_id = ANY($2::int[])
+     GROUP BY ri.product_id
+     ON CONFLICT (shopping_list_id, product_id) DO NOTHING`,
+    [listId, productIds]
+  );
+}
+
 listsRouter.post('/', async (req, res) => {
-  const { type, store_id, days } = req.body || {};
+  const { type, store_id, days, optional_include } = req.body || {};
   if (!['weekly', 'quick'].includes(type)) return res.status(400).json({ error: 'type must be weekly or quick' });
   if (!store_id) return res.status(400).json({ error: 'store_id required' });
 
@@ -75,6 +92,7 @@ listsRouter.post('/', async (req, res) => {
         );
       }
       await syncAutoItems(client, list.id);
+      await addOptionalFromMealPlan(client, list.id, optional_include || []);
     }
     await client.query('COMMIT');
     res.status(201).json(list);
@@ -143,13 +161,13 @@ listsRouter.delete('/:id', async (req, res) => {
 });
 
 listsRouter.post('/:id/items', async (req, res) => {
-  const { product_id } = req.body || {};
+  const { product_id, quantity } = req.body || {};
   if (!product_id) return res.status(400).json({ error: 'product_id required' });
   const { rows } = await query(
-    `INSERT INTO shopping_list_items (shopping_list_id, product_id, source) VALUES ($1, $2, 'manual')
+    `INSERT INTO shopping_list_items (shopping_list_id, product_id, source, quantity) VALUES ($1, $2, 'manual', $3)
      ON CONFLICT (shopping_list_id, product_id) DO UPDATE SET checked = shopping_list_items.checked
      RETURNING *`,
-    [req.params.id, product_id]
+    [req.params.id, product_id, Math.max(1, quantity ?? 1)]
   );
   emitToList(req.params.id, 'list:updated', { listId: Number(req.params.id) });
   res.status(201).json(rows[0]);
@@ -157,13 +175,14 @@ listsRouter.post('/:id/items', async (req, res) => {
 
 // Add all products of a recipe as manual items (used on quick lists).
 listsRouter.post('/:id/recipes', async (req, res) => {
-  const { recipe_id } = req.body || {};
+  const { recipe_id, optional_include } = req.body || {};
   if (!recipe_id) return res.status(400).json({ error: 'recipe_id required' });
   await query(
     `INSERT INTO shopping_list_items (shopping_list_id, product_id, source, quantity)
-     SELECT $1, product_id, 'manual', quantity FROM recipe_items WHERE recipe_id = $2
+     SELECT $1, product_id, 'manual', quantity FROM recipe_items
+     WHERE recipe_id = $2 AND (NOT optional OR product_id = ANY($3::int[]))
      ON CONFLICT (shopping_list_id, product_id) DO NOTHING`,
-    [req.params.id, recipe_id]
+    [req.params.id, recipe_id, optional_include || []]
   );
   emitToList(req.params.id, 'list:updated', { listId: Number(req.params.id) });
   res.json({ ok: true });
@@ -194,7 +213,7 @@ listsRouter.put('/:id/items/:productId', async (req, res) => {
 });
 
 listsRouter.put('/:id/meal-plan/:day', async (req, res) => {
-  const { recipe_id } = req.body || {};
+  const { recipe_id, optional_include } = req.body || {};
   const day = Number(req.params.day);
   const client = await pool.connect();
   try {
@@ -213,6 +232,15 @@ listsRouter.put('/:id/meal-plan/:day', async (req, res) => {
       [planRows[0].id, day, recipe_id || null]
     );
     await syncAutoItems(client, Number(req.params.id));
+    if (recipe_id && Array.isArray(optional_include) && optional_include.length > 0) {
+      await client.query(
+        `INSERT INTO shopping_list_items (shopping_list_id, product_id, source, quantity)
+         SELECT $1, product_id, 'manual', quantity FROM recipe_items
+         WHERE recipe_id = $2 AND optional AND product_id = ANY($3::int[])
+         ON CONFLICT (shopping_list_id, product_id) DO NOTHING`,
+        [req.params.id, recipe_id, optional_include]
+      );
+    }
     await client.query('COMMIT');
     emitToList(req.params.id, 'list:updated', { listId: Number(req.params.id) });
     res.json({ ok: true });

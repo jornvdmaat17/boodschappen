@@ -6,7 +6,8 @@ export const recipesRouter = Router();
 recipesRouter.get('/', async (_req, res) => {
   const { rows } = await query(
     `SELECT r.*, COALESCE(json_agg(
-       json_build_object('id', p.id, 'name', p.name, 'category_id', p.category_id, 'quantity', ri.quantity))
+       json_build_object('id', p.id, 'name', p.name, 'category_id', p.category_id,
+                         'quantity', ri.quantity, 'optional', ri.optional))
        FILTER (WHERE p.id IS NOT NULL), '[]') AS products
      FROM recipes r
      LEFT JOIN recipe_items ri ON ri.recipe_id = r.id
@@ -16,7 +17,7 @@ recipesRouter.get('/', async (_req, res) => {
   res.json(rows);
 });
 
-type RecipeItemInput = { product_id: number; quantity?: number };
+type RecipeItemInput = { product_id: number; quantity?: number; optional?: boolean };
 
 function normalizeItems(body: any): RecipeItemInput[] {
   if (Array.isArray(body?.items)) return body.items;
@@ -35,8 +36,8 @@ recipesRouter.post('/', async (req, res) => {
     const recipe = rows[0];
     for (const item of items) {
       await client.query(
-        'INSERT INTO recipe_items (recipe_id, product_id, quantity) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING',
-        [recipe.id, item.product_id, Math.max(1, item.quantity ?? 1)]
+        'INSERT INTO recipe_items (recipe_id, product_id, quantity, optional) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING',
+        [recipe.id, item.product_id, Math.max(1, item.quantity ?? 1), !!item.optional]
       );
     }
     await client.query('COMMIT');
@@ -63,8 +64,8 @@ recipesRouter.put('/:id', async (req, res) => {
       await client.query('DELETE FROM recipe_items WHERE recipe_id = $1', [req.params.id]);
       for (const item of items) {
         await client.query(
-          'INSERT INTO recipe_items (recipe_id, product_id, quantity) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING',
-          [req.params.id, item.product_id, Math.max(1, item.quantity ?? 1)]
+          'INSERT INTO recipe_items (recipe_id, product_id, quantity, optional) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING',
+          [req.params.id, item.product_id, Math.max(1, item.quantity ?? 1), !!item.optional]
         );
       }
     }

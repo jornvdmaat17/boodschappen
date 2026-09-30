@@ -81,5 +81,11 @@ docker compose exec -T postgres pg_dump -U boodschappen boodschappen > backup_$(
 ### Updaten
 
 ```bash
-git pull && docker compose up -d --build
+git pull
+docker compose up -d --build
+# breng een bestaande database op het nieuwste schema (idempotent, veilig om altijd te draaien):
+docker exec -i boodschappen-db psql -U boodschappen -d boodschappen < db/migrate.sql
 ```
+
+Een verse database krijgt het volledige schema automatisch uit `db/migrations/`;
+`db/migrate.sql` is alleen nodig voor een database die al data bevat.

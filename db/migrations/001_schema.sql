@@ -44,6 +44,7 @@ CREATE TABLE recipe_items (
   recipe_id INT NOT NULL REFERENCES recipes(id) ON DELETE CASCADE,
   product_id INT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
   quantity INT NOT NULL DEFAULT 1 CHECK (quantity >= 1),
+  optional BOOLEAN NOT NULL DEFAULT FALSE,
   UNIQUE(recipe_id, product_id)
 );
 
