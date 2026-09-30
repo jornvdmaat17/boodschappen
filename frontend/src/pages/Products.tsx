@@ -5,6 +5,7 @@ import type { Product, Category } from '../types';
 
 export default function ProductsPage() {
   const [search, setSearch] = useState('');
+  const [filterCategory, setFilterCategory] = useState<number | ''>('');
   const [newName, setNewName] = useState('');
   const [newCategoryId, setNewCategoryId] = useState<number | ''>('');
   const queryClient = useQueryClient();
@@ -39,7 +40,11 @@ export default function ProductsPage() {
   });
 
   const term = search.trim().toLowerCase();
-  const visible = products.filter((p) => term === '' || p.name.toLowerCase().includes(term));
+  const visible = products.filter(
+    (p) =>
+      (term === '' || p.name.toLowerCase().includes(term)) &&
+      (filterCategory === '' || p.category_id === filterCategory)
+  );
 
   return (
     <div className="space-y-4">
@@ -79,13 +84,29 @@ export default function ProductsPage() {
         </div>
       </div>
 
-      <input
-        type="text"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        placeholder="Zoeken..."
-        className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm"
-      />
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Zoeken..."
+          className="flex-1 min-w-0 border border-stone-300 rounded-lg px-3 py-2 text-sm"
+        />
+        <select
+          value={filterCategory}
+          onChange={(e) => setFilterCategory(e.target.value ? Number(e.target.value) : '')}
+          className={`min-w-0 max-w-[45%] border rounded-lg px-2 py-2 text-sm ${
+            filterCategory === '' ? 'border-stone-300 text-stone-500' : 'border-emerald-500 text-emerald-800 bg-emerald-50'
+          }`}
+        >
+          <option value="">Alle categorieën</option>
+          {categories.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+      </div>
 
       <div className="bg-white rounded-xl shadow divide-y divide-stone-100">
         {visible.map((p) => (
