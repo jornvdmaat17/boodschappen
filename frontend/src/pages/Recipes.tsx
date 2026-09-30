@@ -78,6 +78,7 @@ export default function RecipesPage() {
                 </button>
               </div>
             </div>
+            {r.description && <Description text={r.description} />}
             <div className="mt-2 flex flex-wrap gap-1.5">
               {r.products.map((p) => (
                 <span
@@ -101,9 +102,25 @@ export default function RecipesPage() {
   );
 }
 
+function Description({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <p
+      onClick={() => setExpanded(!expanded)}
+      className={`mt-1 text-xs text-stone-500 whitespace-pre-line cursor-pointer ${
+        expanded ? '' : 'line-clamp-2'
+      }`}
+      title={expanded ? 'Klik om in te klappen' : 'Klik om alles te lezen'}
+    >
+      {text}
+    </p>
+  );
+}
+
 function RecipeForm({ recipe, onClose }: { recipe: Recipe | null; onClose: () => void }) {
   const [name, setName] = useState(recipe?.name ?? '');
   const [sourceUrl, setSourceUrl] = useState(recipe?.source_url ?? '');
+  const [description, setDescription] = useState(recipe?.description ?? '');
   const [products, setProducts] = useState<RecipeProduct[]>(recipe?.products ?? []);
   const queryClient = useQueryClient();
 
@@ -112,6 +129,7 @@ function RecipeForm({ recipe, onClose }: { recipe: Recipe | null; onClose: () =>
       const body = JSON.stringify({
         name,
         source_url: sourceUrl.trim(),
+        description: description.trim(),
         items: products.map((p) => ({ product_id: p.id, quantity: p.quantity, optional: p.optional })),
       });
       return recipe
@@ -147,6 +165,13 @@ function RecipeForm({ recipe, onClose }: { recipe: Recipe | null; onClose: () =>
         value={sourceUrl}
         onChange={(e) => setSourceUrl(e.target.value)}
         placeholder="Link naar het recept (optioneel, bijv. Instagram)"
+        className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm"
+      />
+      <textarea
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        placeholder="Beschrijving of notities (optioneel)"
+        rows={3}
         className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm"
       />
       <ProductPicker

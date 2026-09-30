@@ -6,6 +6,7 @@ import type { Product } from '../types';
 
 interface ImportResult {
   name: string;
+  description?: string;
   source_url: string;
   ingredients: string[];
 }
@@ -81,13 +82,23 @@ function suggestProduct(line: string, products: Product[]): Product | null {
   return best;
 }
 
-export default function ImportRecipeModal({ onClose }: { onClose: () => void }) {
-  const [mode, setMode] = useState<'url' | 'text' | 'ai'>('url');
+interface Props {
+  onClose: () => void;
+  /** When set, the saved recipe is reported back (e.g. to assign it to a weekday). */
+  onCreated?: (recipe: { id: number; name: string }) => void;
+  initialMode?: 'url' | 'text' | 'ai';
+  /** Recipe names already planned this week; the AI avoids something similar. */
+  avoidNames?: string[];
+}
+
+export default function ImportRecipeModal({ onClose, onCreated, initialMode, avoidNames = [] }: Props) {
+  const [mode, setMode] = useState<'url' | 'text' | 'ai'>(initialMode ?? 'url');
   const [url, setUrl] = useState('');
   const [pastedText, setPastedText] = useState('');
   const [textUrl, setTextUrl] = useState('');
   const [aiPrompt, setAiPrompt] = useState('');
   const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
   const [sourceUrl, setSourceUrl] = useState('');
   const [rows, setRows] = useState<Row[] | null>(null);
   const [pickingRow, setPickingRow] = useState<number | null>(null);
@@ -111,6 +122,7 @@ export default function ImportRecipeModal({ onClose }: { onClose: () => void }) 
     onSuccess: ({ imported, prods }) => {
       setError('');
       setName(imported.name);
+      setDescription(imported.description ?? '');
       setSourceUrl(imported.source_url);
       setRows(
         imported.ingredients.map((text) => {
@@ -124,9 +136,9 @@ export default function ImportRecipeModal({ onClose }: { onClose: () => void }) 
 
   const generateRecipe = useMutation({
     mutationFn: async () => {
-      const generated = await api<{ name: string; ingredients: string[] }>('/recipes/generate', {
+      const generated = await api<ImportResult>('/recipes/generate', {
         method: 'POST',
-        body: JSON.stringify({ prompt: aiPrompt }),
+        body: JSON.stringify({ prompt: aiPrompt, avoid: avoidNames }),
       });
       const prods = await queryClient.fetchQuery<Product[]>({
         queryKey: ['products'],
@@ -137,6 +149,7 @@ export default function ImportRecipeModal({ onClose }: { onClose: () => void }) 
     onSuccess: ({ generated, prods }) => {
       setError('');
       setName(generated.name);
+      setDescription(generated.description ?? '');
       setSourceUrl('');
       setRows(
         generated.ingredients.map((text) => {
@@ -157,11 +170,11 @@ export default function ImportRecipeModal({ onClose }: { onClose: () => void }) 
         queryFn: () => api('/products'),
       });
       try {
-        const parsed = await api<{ name: string; ingredients: string[] }>('/recipes/parse-text', {
+        const parsed = await api<ImportResult>('/recipes/parse-text', {
           method: 'POST',
           body: JSON.stringify({ text: pastedText }),
         });
-        return { prods, name: parsed.name, lines: parsed.ingredients };
+        return { prods, name: parsed.name, description: parsed.description ?? '', lines: parsed.ingredients };
       } catch {
         const lines = pastedText
           .split('\n')
@@ -174,13 +187,15 @@ export default function ImportRecipeModal({ onClose }: { onClose: () => void }) 
           )
           .filter((l) => l.length > 1 && l.length <= 100)
           .slice(0, 60);
-        return { prods, name: '', lines };
+        return { prods, name: '', description: '', lines };
       }
     },
-    onSuccess: ({ prods, name: parsedName, lines }) => {
+    onSuccess: ({ prods, name: parsedName, description: parsedDescription, lines }) => {
       setError('');
       setSourceUrl(textUrl.trim());
       if (parsedName) setName(parsedName);
+      // The AI's summary if it gave one, otherwise keep the original caption.
+      setDescription(parsedDescription || pastedText.trim());
       setRows(
         lines.map((text) => {
           const product = suggestProduct(text, prods);
@@ -198,14 +213,15 @@ export default function ImportRecipeModal({ onClose }: { onClose: () => void }) 
       const items = chosen
         .filter((r) => (seen.has(r.product!.id) ? false : (seen.add(r.product!.id), true)))
         .map((r) => ({ product_id: r.product!.id, quantity: 1 }));
-      return api('/recipes', {
+      return api<{ id: number; name: string }>('/recipes', {
         method: 'POST',
-        body: JSON.stringify({ name, source_url: sourceUrl, items }),
+        body: JSON.stringify({ name, source_url: sourceUrl, description, items }),
       });
     },
-    onSuccess: () => {
+    onSuccess: (created) => {
       queryClient.invalidateQueries({ queryKey: ['recipes'] });
-      onClose();
+      if (onCreated) onCreated(created);
+      else onClose();
     },
     onError: (e: Error) => setError(e.message),
   });
@@ -275,7 +291,9 @@ export default function ImportRecipeModal({ onClose }: { onClose: () => void }) 
             {mode === 'ai' && (
               <>
                 <p className="text-sm text-stone-500">
-                  Beschrijf waar je zin in hebt en de AI bedenkt een recept met jullie producten.
+                  {avoidNames.length > 0
+                    ? `Beschrijf waar je zin in hebt (mag leeg). De AI bedenkt iets anders dan: ${avoidNames.join(', ')}.`
+                    : 'Beschrijf waar je zin in hebt en de AI bedenkt een recept met jullie producten.'}
                 </p>
                 <textarea
                   value={aiPrompt}
@@ -287,7 +305,7 @@ export default function ImportRecipeModal({ onClose }: { onClose: () => void }) 
                 />
                 <button
                   onClick={() => generateRecipe.mutate()}
-                  disabled={!aiPrompt.trim() || generateRecipe.isPending}
+                  disabled={(!aiPrompt.trim() && avoidNames.length === 0) || generateRecipe.isPending}
                   className="w-full bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-emerald-700 disabled:opacity-40"
                 >
                   {generateRecipe.isPending ? 'Even denken...' : '✨ Genereer recept'}
@@ -338,6 +356,13 @@ export default function ImportRecipeModal({ onClose }: { onClose: () => void }) 
               onChange={(e) => setName(e.target.value)}
               placeholder="Naam van het recept"
               className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm font-medium"
+            />
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Beschrijving (optioneel)"
+              rows={3}
+              className="w-full border border-stone-300 rounded-lg px-3 py-2 text-xs text-stone-600"
             />
             <p className="text-sm text-stone-500">
               Vink aan wat je wilt toevoegen en koppel een product. Regels zonder vinkje (zoals kruiden

@@ -37,6 +37,7 @@ CREATE TABLE recipes (
   id SERIAL PRIMARY KEY,
   name VARCHAR(255) NOT NULL,
   source_url TEXT,
+  description TEXT,
   created_at TIMESTAMP DEFAULT NOW()
 );
 

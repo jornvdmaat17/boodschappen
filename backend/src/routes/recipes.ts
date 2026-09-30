@@ -56,7 +56,7 @@ class AiError extends Error {
 }
 
 const JSON_FORMAT_RULES = `Antwoord UITSLUITEND met geldige JSON, zonder uitleg of markdown, in dit formaat:
-{"name": "korte naam van het gerecht", "ingredients": ["ingrediënt", "ingrediënt", ...]}
+{"name": "korte naam van het gerecht", "description": "2-4 zinnen: wat is het gerecht en hoe maak je het in grote lijnen", "ingredients": ["ingrediënt", "ingrediënt", ...]}
 Regels voor ingredients: korte generieke Nederlandse namen zonder hoeveelheden (dus "rode ui", niet "2 rode uien").`;
 
 async function productNameList(): Promise<string> {
@@ -65,7 +65,10 @@ async function productNameList(): Promise<string> {
 }
 
 // Calls Cloudflare Workers AI and returns the {name, ingredients} JSON it produced.
-async function askWorkersAi(system: string, user: string): Promise<{ name: string; ingredients: string[] }> {
+async function askWorkersAi(
+  system: string,
+  user: string
+): Promise<{ name: string; description: string; ingredients: string[] }> {
   if (!config.cfAccountId || !config.cfAiToken) {
     throw new AiError(
       'AI is niet geconfigureerd. Zet CLOUDFLARE_ACCOUNT_ID en CLOUDFLARE_AI_TOKEN in .env en herstart.',
@@ -120,6 +123,7 @@ async function askWorkersAi(system: string, user: string): Promise<{ name: strin
   }
   return {
     name: String(parsed.name).slice(0, 200),
+    description: String(parsed.description || '').slice(0, 2000),
     ingredients: parsed.ingredients.map((s: unknown) => String(s).trim()).filter(Boolean).slice(0, 30),
   };
 }
@@ -127,13 +131,21 @@ async function askWorkersAi(system: string, user: string): Promise<{ name: strin
 // Generates a recipe with Cloudflare Workers AI, steered towards the household's
 // existing product names so the ingredient matching lands automatically.
 recipesRouter.post('/generate', async (req, res) => {
-  const { prompt } = req.body || {};
-  if (!prompt?.trim()) return res.status(400).json({ error: 'prompt required' });
-  const system = `Je bent een Nederlandse thuiskok. Bedenk één avondmaaltijd-recept dat past bij de wens van de gebruiker (voor 2 personen).
+  const { prompt, avoid } = req.body || {};
+  const avoidNames = (Array.isArray(avoid) ? avoid : [])
+    .map((s: unknown) => String(s).trim())
+    .filter(Boolean)
+    .slice(0, 14);
+  const avoidRule =
+    avoidNames.length > 0
+      ? `\nDeze week staat al op het menu: ${avoidNames.join(', ')}. Bedenk iets dat hier duidelijk van verschilt (andere keuken of ander hoofdingrediënt).`
+      : '';
+  const system = `Je bent een Nederlandse thuiskok. Bedenk één avondmaaltijd-recept dat past bij de wens van de gebruiker (voor 2 personen).${avoidRule}
 ${JSON_FORMAT_RULES}
 Gebruik waar mogelijk exact deze bestaande productnamen: ${await productNameList()}`;
+  const userPrompt = String(prompt || '').trim() || 'Verras ons met een lekkere avondmaaltijd.';
   try {
-    res.json(await askWorkersAi(system, String(prompt).slice(0, 500)));
+    res.json(await askWorkersAi(system, userPrompt.slice(0, 500)));
   } catch (err) {
     if (err instanceof AiError) return res.status(err.status).json({ error: err.message });
     throw err;
@@ -195,7 +207,12 @@ recipesRouter.post('/import-url', async (req, res) => {
     return res.status(422).json({ error: 'Geen recept gevonden op deze pagina' });
   }
   const ingredients = (recipe.recipeIngredient || []).map((s: unknown) => String(s).trim()).filter(Boolean);
-  res.json({ name: String(recipe.name || '').trim() || 'Recept', source_url: parsed.href, ingredients });
+  res.json({
+    name: String(recipe.name || '').trim() || 'Recept',
+    description: String(recipe.description || '').trim().slice(0, 2000),
+    source_url: parsed.href,
+    ingredients,
+  });
 });
 
 function normalizeItems(body: any): RecipeItemInput[] {
@@ -205,15 +222,15 @@ function normalizeItems(body: any): RecipeItemInput[] {
 }
 
 recipesRouter.post('/', async (req, res) => {
-  const { name, source_url } = req.body || {};
+  const { name, source_url, description } = req.body || {};
   if (!name?.trim()) return res.status(400).json({ error: 'Name required' });
   const items = normalizeItems(req.body);
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const { rows } = await client.query(
-      'INSERT INTO recipes (name, source_url) VALUES ($1, $2) RETURNING *',
-      [name.trim(), source_url || null]
+      'INSERT INTO recipes (name, source_url, description) VALUES ($1, $2, $3) RETURNING *',
+      [name.trim(), source_url || null, description?.trim() || null]
     );
     const recipe = rows[0];
     for (const item of items) {
@@ -245,6 +262,12 @@ recipesRouter.put('/:id', async (req, res) => {
     if (source_url !== undefined) {
       await client.query('UPDATE recipes SET source_url = $1 WHERE id = $2', [
         source_url?.trim() || null,
+        req.params.id,
+      ]);
+    }
+    if (req.body?.description !== undefined) {
+      await client.query('UPDATE recipes SET description = $1 WHERE id = $2', [
+        req.body.description?.trim() || null,
         req.params.id,
       ]);
     }

@@ -5,6 +5,7 @@ import { api } from '../api/client';
 import ProductPicker from '../components/ProductPicker';
 import QtyControl from '../components/QtyControl';
 import OptionalItemsModal from '../components/OptionalItemsModal';
+import ImportRecipeModal from '../components/ImportRecipeModal';
 import { DAY_NAMES } from '../types';
 import type { Recipe, Store, RecipeProduct } from '../types';
 
@@ -19,6 +20,7 @@ export default function WeeklyCreatePage() {
   const [shoppingDate, setShoppingDate] = useState(nextSunday());
   const [days, setDays] = useState<(number | null)[]>(Array(7).fill(null));
   const [newRecipeForDay, setNewRecipeForDay] = useState<number | null>(null);
+  const [aiForDay, setAiForDay] = useState<number | null>(null);
   const [askOptional, setAskOptional] = useState<RecipeProduct[] | null>(null);
   const navigate = useNavigate();
 
@@ -110,9 +112,30 @@ export default function WeeklyCreatePage() {
             >
               + nieuw
             </button>
+            <button
+              onClick={() => setAiForDay(day)}
+              className="text-sm"
+              title="Laat AI iets bedenken dat afwijkt van de rest van de week"
+            >
+              ✨
+            </button>
           </div>
         ))}
       </div>
+
+      {aiForDay !== null && (
+        <ImportRecipeModal
+          initialMode="ai"
+          avoidNames={recipes.filter((r) => days.includes(r.id)).map((r) => r.name)}
+          onClose={() => setAiForDay(null)}
+          onCreated={(recipe) => {
+            const next = [...days];
+            next[aiForDay] = recipe.id;
+            setDays(next);
+            setAiForDay(null);
+          }}
+        />
+      )}
 
       {newRecipeForDay !== null && (
         <NewRecipeModal

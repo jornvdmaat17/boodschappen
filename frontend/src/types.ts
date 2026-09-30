@@ -30,6 +30,7 @@ export interface Recipe {
   id: number;
   name: string;
   source_url: string | null;
+  description: string | null;
   products: RecipeProduct[];
 }
 
