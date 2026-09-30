@@ -103,6 +103,7 @@ export default function RecipesPage() {
 
 function RecipeForm({ recipe, onClose }: { recipe: Recipe | null; onClose: () => void }) {
   const [name, setName] = useState(recipe?.name ?? '');
+  const [sourceUrl, setSourceUrl] = useState(recipe?.source_url ?? '');
   const [products, setProducts] = useState<RecipeProduct[]>(recipe?.products ?? []);
   const queryClient = useQueryClient();
 
@@ -110,6 +111,7 @@ function RecipeForm({ recipe, onClose }: { recipe: Recipe | null; onClose: () =>
     mutationFn: () => {
       const body = JSON.stringify({
         name,
+        source_url: sourceUrl.trim(),
         items: products.map((p) => ({ product_id: p.id, quantity: p.quantity, optional: p.optional })),
       });
       return recipe
@@ -138,6 +140,13 @@ function RecipeForm({ recipe, onClose }: { recipe: Recipe | null; onClose: () =>
         value={name}
         onChange={(e) => setName(e.target.value)}
         placeholder="Naam van het recept"
+        className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm"
+      />
+      <input
+        type="url"
+        value={sourceUrl}
+        onChange={(e) => setSourceUrl(e.target.value)}
+        placeholder="Link naar het recept (optioneel, bijv. Instagram)"
         className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm"
       />
       <ProductPicker

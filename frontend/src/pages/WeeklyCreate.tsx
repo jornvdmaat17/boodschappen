@@ -153,6 +153,7 @@ export default function WeeklyCreatePage() {
 
 function NewRecipeModal({ onClose, onCreated }: { onClose: () => void; onCreated: (r: Recipe) => void }) {
   const [name, setName] = useState('');
+  const [sourceUrl, setSourceUrl] = useState('');
   const [products, setProducts] = useState<RecipeProduct[]>([]);
   const queryClient = useQueryClient();
 
@@ -162,6 +163,7 @@ function NewRecipeModal({ onClose, onCreated }: { onClose: () => void; onCreated
         method: 'POST',
         body: JSON.stringify({
           name,
+          source_url: sourceUrl.trim() || null,
           items: products.map((p) => ({ product_id: p.id, quantity: p.quantity, optional: p.optional })),
         }),
       }),
@@ -181,6 +183,13 @@ function NewRecipeModal({ onClose, onCreated }: { onClose: () => void; onCreated
           onChange={(e) => setName(e.target.value)}
           placeholder="Naam van het recept"
           autoFocus
+          className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm"
+        />
+        <input
+          type="url"
+          value={sourceUrl}
+          onChange={(e) => setSourceUrl(e.target.value)}
+          placeholder="Link naar het recept (optioneel)"
           className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm"
         />
         <ProductPicker

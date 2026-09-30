@@ -124,7 +124,7 @@ recipesRouter.post('/', async (req, res) => {
 });
 
 recipesRouter.put('/:id', async (req, res) => {
-  const { name } = req.body || {};
+  const { name, source_url } = req.body || {};
   const hasItems = Array.isArray(req.body?.items) || Array.isArray(req.body?.product_ids);
   const items = normalizeItems(req.body);
   const client = await pool.connect();
@@ -132,6 +132,12 @@ recipesRouter.put('/:id', async (req, res) => {
     await client.query('BEGIN');
     if (name?.trim()) {
       await client.query('UPDATE recipes SET name = $1 WHERE id = $2', [name.trim(), req.params.id]);
+    }
+    if (source_url !== undefined) {
+      await client.query('UPDATE recipes SET source_url = $1 WHERE id = $2', [
+        source_url?.trim() || null,
+        req.params.id,
+      ]);
     }
     if (hasItems) {
       await client.query('DELETE FROM recipe_items WHERE recipe_id = $1', [req.params.id]);
