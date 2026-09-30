@@ -82,10 +82,11 @@ function suggestProduct(line: string, products: Product[]): Product | null {
 }
 
 export default function ImportRecipeModal({ onClose }: { onClose: () => void }) {
-  const [mode, setMode] = useState<'url' | 'text'>('url');
+  const [mode, setMode] = useState<'url' | 'text' | 'ai'>('url');
   const [url, setUrl] = useState('');
   const [pastedText, setPastedText] = useState('');
   const [textUrl, setTextUrl] = useState('');
+  const [aiPrompt, setAiPrompt] = useState('');
   const [name, setName] = useState('');
   const [sourceUrl, setSourceUrl] = useState('');
   const [rows, setRows] = useState<Row[] | null>(null);
@@ -113,6 +114,32 @@ export default function ImportRecipeModal({ onClose }: { onClose: () => void }) 
       setSourceUrl(imported.source_url);
       setRows(
         imported.ingredients.map((text) => {
+          const product = suggestProduct(text, prods);
+          return { text, product, include: product !== null };
+        })
+      );
+    },
+    onError: (e: Error) => setError(e.message),
+  });
+
+  const generateRecipe = useMutation({
+    mutationFn: async () => {
+      const generated = await api<{ name: string; ingredients: string[] }>('/recipes/generate', {
+        method: 'POST',
+        body: JSON.stringify({ prompt: aiPrompt }),
+      });
+      const prods = await queryClient.fetchQuery<Product[]>({
+        queryKey: ['products'],
+        queryFn: () => api('/products'),
+      });
+      return { generated, prods };
+    },
+    onSuccess: ({ generated, prods }) => {
+      setError('');
+      setName(generated.name);
+      setSourceUrl('');
+      setRows(
+        generated.ingredients.map((text) => {
           const product = suggestProduct(text, prods);
           return { text, product, include: product !== null };
         })
@@ -189,6 +216,7 @@ export default function ImportRecipeModal({ onClose }: { onClose: () => void }) 
                 [
                   ['url', 'Van URL'],
                   ['text', 'Plak tekst'],
+                  ['ai', '✨ Bedenk'],
                 ] as const
               ).map(([m, label]) => (
                 <button
@@ -229,6 +257,29 @@ export default function ImportRecipeModal({ onClose }: { onClose: () => void }) 
               </>
             )}
 
+            {mode === 'ai' && (
+              <>
+                <p className="text-sm text-stone-500">
+                  Beschrijf waar je zin in hebt en de AI bedenkt een recept met jullie producten.
+                </p>
+                <textarea
+                  value={aiPrompt}
+                  onChange={(e) => setAiPrompt(e.target.value)}
+                  placeholder={'bijv. "iets snels met kip en rijst" of "verras ons, vegetarisch"'}
+                  rows={3}
+                  autoFocus
+                  className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm"
+                />
+                <button
+                  onClick={() => generateRecipe.mutate()}
+                  disabled={!aiPrompt.trim() || generateRecipe.isPending}
+                  className="w-full bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-emerald-700 disabled:opacity-40"
+                >
+                  {generateRecipe.isPending ? 'Even denken...' : '✨ Genereer recept'}
+                </button>
+              </>
+            )}
+
             {mode === 'text' && (
               <>
                 <p className="text-sm text-stone-500">
@@ -263,6 +314,9 @@ export default function ImportRecipeModal({ onClose }: { onClose: () => void }) 
 
         {rows && (
           <>
+            <button onClick={() => setRows(null)} className="text-sm text-emerald-700">
+              ← terug{mode === 'ai' ? ' / probeer opnieuw' : ''}
+            </button>
             <input
               type="text"
               value={name}

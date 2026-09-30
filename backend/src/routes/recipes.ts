@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { query, pool } from '../db.js';
+import { config } from '../config.js';
 
 export const recipesRouter = Router();
 
@@ -47,6 +48,74 @@ function findRecipeNode(html: string): any | null {
   }
   return null;
 }
+
+// Generates a recipe with Cloudflare Workers AI, steered towards the household's
+// existing product names so the ingredient matching lands automatically.
+recipesRouter.post('/generate', async (req, res) => {
+  const { prompt } = req.body || {};
+  if (!prompt?.trim()) return res.status(400).json({ error: 'prompt required' });
+  if (!config.cfAccountId || !config.cfAiToken) {
+    return res.status(422).json({
+      error:
+        'AI is niet geconfigureerd. Zet CLOUDFLARE_ACCOUNT_ID en CLOUDFLARE_AI_TOKEN in .env en herstart.',
+    });
+  }
+
+  const { rows: products } = await query('SELECT name FROM products ORDER BY name');
+  const productNames = products.map((r) => r.name).join(', ');
+
+  const system = `Je bent een Nederlandse thuiskok. Bedenk één avondmaaltijd-recept dat past bij de wens van de gebruiker (voor 2 personen).
+Antwoord UITSLUITEND met geldige JSON, zonder uitleg of markdown, in dit formaat:
+{"name": "korte naam van het gerecht", "ingredients": ["ingrediënt", "ingrediënt", ...]}
+Regels voor ingredients: korte generieke Nederlandse namen zonder hoeveelheden (dus "rode ui", niet "2 rode uien").
+Gebruik waar mogelijk exact deze bestaande productnamen: ${productNames}`;
+
+  let aiResponse: Response;
+  try {
+    aiResponse = await fetch(
+      `https://api.cloudflare.com/client/v4/accounts/${config.cfAccountId}/ai/run/${config.cfAiModel}`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${config.cfAiToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user', content: String(prompt).slice(0, 500) },
+          ],
+          max_tokens: 512,
+        }),
+        signal: AbortSignal.timeout(30_000),
+      }
+    );
+  } catch {
+    return res.status(502).json({ error: 'Kon Cloudflare AI niet bereiken' });
+  }
+
+  const data: any = await aiResponse.json().catch(() => null);
+  if (!aiResponse.ok || !data?.success) {
+    const detail = data?.errors?.[0]?.message || `status ${aiResponse.status}`;
+    return res.status(422).json({ error: `Cloudflare AI fout: ${detail}` });
+  }
+
+  const text: string = data.result?.response ?? '';
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  let parsed: any = null;
+  try {
+    parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : null;
+  } catch {
+    parsed = null;
+  }
+  if (!parsed?.name || !Array.isArray(parsed.ingredients)) {
+    return res.status(422).json({ error: 'AI gaf geen bruikbaar recept terug, probeer opnieuw' });
+  }
+  res.json({
+    name: String(parsed.name).slice(0, 200),
+    ingredients: parsed.ingredients.map((s: unknown) => String(s).trim()).filter(Boolean).slice(0, 30),
+  });
+});
 
 // Fetches a recipe page and extracts name + ingredients from its schema.org data.
 recipesRouter.post('/import-url', async (req, res) => {
