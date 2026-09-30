@@ -65,7 +65,7 @@ export default function WeeklyCreatePage() {
                 next[day] = e.target.value ? Number(e.target.value) : null;
                 setDays(next);
               }}
-              className="flex-1 border border-stone-300 rounded-lg px-2 py-1.5 text-sm"
+              className="flex-1 min-w-0 border border-stone-300 rounded-lg px-2 py-1.5 text-sm"
             >
               <option value="">— geen maaltijd —</option>
               {recipes.map((r) => (

@@ -84,7 +84,7 @@ export default function ProductPicker({ onPick, excludeIds = [], autoFocus }: Pr
               <select
                 value={newCategoryId}
                 onChange={(e) => setNewCategoryId(e.target.value ? Number(e.target.value) : '')}
-                className="flex-1 border border-stone-300 rounded px-2 py-1 text-sm"
+                className="flex-1 min-w-0 border border-stone-300 rounded px-2 py-1 text-sm"
               >
                 <option value="">Categorie...</option>
                 {categories.map((c) => (

@@ -207,7 +207,7 @@ function MealPlanEditor({
             onChange={(e) =>
               updateDay.mutate({ day, recipe_id: e.target.value ? Number(e.target.value) : null })
             }
-            className="flex-1 border border-stone-200 rounded-lg px-2 py-1 text-sm"
+            className="flex-1 min-w-0 border border-stone-200 rounded-lg px-2 py-1 text-sm"
           >
             <option value="">— geen —</option>
             {recipes.map((r) => (

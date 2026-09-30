@@ -47,33 +47,35 @@ export default function ProductsPage() {
 
       <div className="bg-white rounded-xl shadow p-4 space-y-2">
         <p className="text-sm font-medium">Nieuw product</p>
-        <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row gap-2">
           <input
             type="text"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             placeholder="Naam"
-            className="flex-1 border border-stone-300 rounded-lg px-3 py-2 text-sm"
+            className="flex-1 min-w-0 border border-stone-300 rounded-lg px-3 py-2 text-sm"
           />
-          <select
-            value={newCategoryId}
-            onChange={(e) => setNewCategoryId(e.target.value ? Number(e.target.value) : '')}
-            className="border border-stone-300 rounded-lg px-2 py-2 text-sm"
-          >
-            <option value="">Categorie...</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-          <button
-            onClick={() => createProduct.mutate()}
-            disabled={!newName.trim() || createProduct.isPending}
-            className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-emerald-700 disabled:opacity-40"
-          >
-            +
-          </button>
+          <div className="flex gap-2">
+            <select
+              value={newCategoryId}
+              onChange={(e) => setNewCategoryId(e.target.value ? Number(e.target.value) : '')}
+              className="flex-1 min-w-0 border border-stone-300 rounded-lg px-2 py-2 text-sm"
+            >
+              <option value="">Categorie...</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={() => createProduct.mutate()}
+              disabled={!newName.trim() || createProduct.isPending}
+              className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-emerald-700 disabled:opacity-40"
+            >
+              +
+            </button>
+          </div>
         </div>
       </div>
 
@@ -87,14 +89,14 @@ export default function ProductsPage() {
 
       <div className="bg-white rounded-xl shadow divide-y divide-stone-100">
         {visible.map((p) => (
-          <div key={p.id} className="px-4 py-2.5 flex items-center gap-3">
-            <span className="flex-1 text-sm">{p.name}</span>
+          <div key={p.id} className="px-4 py-2.5 flex items-center flex-wrap gap-x-3 gap-y-1.5">
+            <span className="flex-1 min-w-0 break-words text-sm">{p.name}</span>
             <select
               value={p.category_id ?? ''}
               onChange={(e) =>
                 updateProduct.mutate({ id: p.id, category_id: e.target.value ? Number(e.target.value) : null })
               }
-              className="border border-stone-200 rounded-lg px-2 py-1 text-xs text-stone-600"
+              className="w-full sm:w-auto order-last sm:order-none border border-stone-200 rounded-lg px-2 py-1 text-xs text-stone-600"
             >
               <option value="">geen categorie</option>
               {categories.map((c) => (
