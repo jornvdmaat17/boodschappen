@@ -80,6 +80,7 @@ CREATE TABLE meal_plan_days (
   meal_plan_id INT NOT NULL REFERENCES weekly_meal_plans(id) ON DELETE CASCADE,
   day_of_week INT NOT NULL CHECK (day_of_week BETWEEN 0 AND 6),
   recipe_id INT REFERENCES recipes(id) ON DELETE SET NULL,
+  special VARCHAR(30),
   UNIQUE(meal_plan_id, day_of_week)
 );
 

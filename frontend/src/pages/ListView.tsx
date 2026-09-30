@@ -7,8 +7,8 @@ import { useListRoom } from '../hooks/useSocket';
 import ProductPicker from '../components/ProductPicker';
 import QtyControl from '../components/QtyControl';
 import OptionalItemsModal from '../components/OptionalItemsModal';
-import { DAY_NAMES, formatDate } from '../types';
-import type { ShoppingListDetail, Recipe, ListItem, RecipeProduct } from '../types';
+import { DAY_NAMES, SPECIAL_DAYS, formatDate } from '../types';
+import type { ShoppingListDetail, Recipe, ListItem, RecipeProduct, MealPlanDay } from '../types';
 
 export default function ListViewPage() {
   const { id } = useParams();
@@ -287,7 +287,7 @@ function MealPlanEditor({
   disabled,
 }: {
   listId: number;
-  plan: { day_of_week: number; recipe_id: number | null }[];
+  plan: MealPlanDay[];
   disabled: boolean;
 }) {
   const queryClient = useQueryClient();
@@ -300,27 +300,36 @@ function MealPlanEditor({
     mutationFn: ({
       day,
       recipe_id,
+      special,
       optional_include,
     }: {
       day: number;
       recipe_id: number | null;
+      special: string | null;
       optional_include: number[];
     }) =>
       api(`/shopping-lists/${listId}/meal-plan/${day}`, {
         method: 'PUT',
-        body: JSON.stringify({ recipe_id, optional_include }),
+        body: JSON.stringify({ recipe_id, special, optional_include }),
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['list', listId] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['list', listId] });
+      queryClient.invalidateQueries({ queryKey: ['today-menu'] });
+    },
   });
 
-  function changeDay(day: number, recipeId: number | null) {
+  function changeDay(day: number, value: string) {
+    if (value.startsWith('s:')) {
+      return updateDay.mutate({ day, recipe_id: null, special: value.slice(2), optional_include: [] });
+    }
+    const recipeId = value ? Number(value) : null;
     const recipe = recipeId ? recipes.find((r) => r.id === recipeId) : null;
     const optionals = recipe?.products.filter((p) => p.optional) ?? [];
     if (recipeId && optionals.length > 0) setAsking({ day, recipeId, products: optionals });
-    else updateDay.mutate({ day, recipe_id: recipeId, optional_include: [] });
+    else updateDay.mutate({ day, recipe_id: recipeId, special: null, optional_include: [] });
   }
 
-  const byDay = new Map(plan.map((d) => [d.day_of_week, d.recipe_id]));
+  const byDay = new Map<number, MealPlanDay>(plan.map((d) => [d.day_of_week, d]));
 
   return (
     <div className="border-t border-stone-100 divide-y divide-stone-50">
@@ -328,15 +337,24 @@ function MealPlanEditor({
         <div key={day} className="px-4 py-2 flex items-center gap-3">
           <span className="w-24 text-sm">{name}</span>
           <select
-            value={byDay.get(day) ?? ''}
+            value={
+              byDay.get(day)?.special
+                ? `s:${byDay.get(day)!.special}`
+                : byDay.get(day)?.recipe_id ?? ''
+            }
             disabled={disabled || updateDay.isPending}
-            onChange={(e) => changeDay(day, e.target.value ? Number(e.target.value) : null)}
+            onChange={(e) => changeDay(day, e.target.value)}
             className="flex-1 min-w-0 border border-stone-200 rounded-lg px-2 py-1 text-sm"
           >
             <option value="">— geen —</option>
             {recipes.map((r) => (
               <option key={r.id} value={r.id}>
                 {r.name}
+              </option>
+            ))}
+            {SPECIAL_DAYS.map((s) => (
+              <option key={s.value} value={`s:${s.value}`}>
+                {s.label}
               </option>
             ))}
           </select>
@@ -347,7 +365,12 @@ function MealPlanEditor({
           products={asking.products}
           onClose={() => setAsking(null)}
           onConfirm={(ids) => {
-            updateDay.mutate({ day: asking.day, recipe_id: asking.recipeId, optional_include: ids });
+            updateDay.mutate({
+              day: asking.day,
+              recipe_id: asking.recipeId,
+              special: null,
+              optional_include: ids,
+            });
             setAsking(null);
           }}
         />

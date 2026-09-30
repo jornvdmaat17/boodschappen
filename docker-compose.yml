@@ -3,6 +3,7 @@ services:
     image: postgres:15-alpine
     container_name: boodschappen-db
     environment:
+      TZ: Europe/Amsterdam
       POSTGRES_USER: boodschappen
       POSTGRES_PASSWORD: ${DB_PASSWORD:-boodschappen}
       POSTGRES_DB: boodschappen
@@ -22,6 +23,7 @@ services:
     build: ./backend
     container_name: boodschappen-backend
     environment:
+      TZ: Europe/Amsterdam
       DATABASE_URL: postgres://boodschappen:${DB_PASSWORD:-boodschappen}@postgres:5432/boodschappen
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-jorn.vandermaat@blueprintautomation.nl}

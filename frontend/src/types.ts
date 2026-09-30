@@ -70,7 +70,25 @@ export interface ListItem {
 export interface MealPlanDay {
   day_of_week: number;
   recipe_id: number | null;
+  special: string | null;
   recipe_name: string | null;
+}
+
+export interface TodayMenu {
+  recipe_id: number | null;
+  special: string | null;
+  recipe_name: string | null;
+  description: string | null;
+}
+
+export const SPECIAL_DAYS = [
+  { value: 'uit_eten', label: '🍴 Uit eten' },
+  { value: 'jorn', label: '👤 Jorn alleen' },
+  { value: 'noor', label: '👤 Noor alleen' },
+];
+
+export function specialLabel(value: string): string {
+  return SPECIAL_DAYS.find((s) => s.value === value)?.label ?? value;
 }
 
 export interface ShoppingListDetail extends ShoppingListSummary {

@@ -6,8 +6,13 @@ import ProductPicker from '../components/ProductPicker';
 import QtyControl from '../components/QtyControl';
 import OptionalItemsModal from '../components/OptionalItemsModal';
 import ImportRecipeModal from '../components/ImportRecipeModal';
-import { DAY_NAMES } from '../types';
+import { DAY_NAMES, SPECIAL_DAYS } from '../types';
 import type { Recipe, Store, RecipeProduct } from '../types';
+
+interface DayChoice {
+  recipe_id: number | null;
+  special: string | null;
+}
 
 function nextSunday(): string {
   const d = new Date();
@@ -18,11 +23,18 @@ function nextSunday(): string {
 export default function WeeklyCreatePage() {
   const [storeId, setStoreId] = useState<number | ''>('');
   const [shoppingDate, setShoppingDate] = useState(nextSunday());
-  const [days, setDays] = useState<(number | null)[]>(Array(7).fill(null));
+  const [days, setDays] = useState<DayChoice[]>(
+    Array.from({ length: 7 }, () => ({ recipe_id: null, special: null }))
+  );
+
+  function setDay(day: number, choice: DayChoice) {
+    setDays((prev) => prev.map((d, i) => (i === day ? choice : d)));
+  }
   const [newRecipeForDay, setNewRecipeForDay] = useState<number | null>(null);
   const [aiForDay, setAiForDay] = useState<number | null>(null);
   const [askOptional, setAskOptional] = useState<RecipeProduct[] | null>(null);
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   const { data: stores = [] } = useQuery<Store[]>({ queryKey: ['stores'], queryFn: () => api('/stores') });
   const { data: recipes = [] } = useQuery<Recipe[]>({ queryKey: ['recipes'], queryFn: () => api('/recipes') });
@@ -34,16 +46,20 @@ export default function WeeklyCreatePage() {
         body: JSON.stringify({
           type: 'weekly',
           store_id: storeId,
-          days: days.map((recipe_id, day_of_week) => ({ day_of_week, recipe_id })),
+          days: days.map((d, day_of_week) => ({ day_of_week, ...d })),
           optional_include,
           shopping_date: shoppingDate,
         }),
       }),
-    onSuccess: (list: any) => navigate(`/list/${list.id}`),
+    onSuccess: (list: any) => {
+      queryClient.invalidateQueries({ queryKey: ['lists'] });
+      queryClient.invalidateQueries({ queryKey: ['today-menu'] });
+      navigate(`/list/${list.id}`);
+    },
   });
 
   function generate() {
-    const selected = recipes.filter((r) => days.includes(r.id));
+    const selected = recipes.filter((r) => days.some((d) => d.recipe_id === r.id));
     const optionals = new Map<number, RecipeProduct>();
     for (const r of selected) {
       for (const p of r.products) if (p.optional) optionals.set(p.id, p);
@@ -90,11 +106,11 @@ export default function WeeklyCreatePage() {
           <div key={day} className="p-3 flex items-center gap-3">
             <span className="w-24 text-sm font-medium">{name}</span>
             <select
-              value={days[day] ?? ''}
+              value={days[day].special ? `s:${days[day].special}` : days[day].recipe_id ?? ''}
               onChange={(e) => {
-                const next = [...days];
-                next[day] = e.target.value ? Number(e.target.value) : null;
-                setDays(next);
+                const v = e.target.value;
+                if (v.startsWith('s:')) setDay(day, { recipe_id: null, special: v.slice(2) });
+                else setDay(day, { recipe_id: v ? Number(v) : null, special: null });
               }}
               className="flex-1 min-w-0 border border-stone-300 rounded-lg px-2 py-1.5 text-sm"
             >
@@ -102,6 +118,11 @@ export default function WeeklyCreatePage() {
               {recipes.map((r) => (
                 <option key={r.id} value={r.id}>
                   {r.name}
+                </option>
+              ))}
+              {SPECIAL_DAYS.map((s) => (
+                <option key={s.value} value={`s:${s.value}`}>
+                  {s.label}
                 </option>
               ))}
             </select>
@@ -126,12 +147,10 @@ export default function WeeklyCreatePage() {
       {aiForDay !== null && (
         <ImportRecipeModal
           initialMode="ai"
-          avoidNames={recipes.filter((r) => days.includes(r.id)).map((r) => r.name)}
+          avoidNames={recipes.filter((r) => days.some((d) => d.recipe_id === r.id)).map((r) => r.name)}
           onClose={() => setAiForDay(null)}
           onCreated={(recipe) => {
-            const next = [...days];
-            next[aiForDay] = recipe.id;
-            setDays(next);
+            setDay(aiForDay, { recipe_id: recipe.id, special: null });
             setAiForDay(null);
           }}
         />
@@ -141,9 +160,7 @@ export default function WeeklyCreatePage() {
         <NewRecipeModal
           onClose={() => setNewRecipeForDay(null)}
           onCreated={(recipe) => {
-            const next = [...days];
-            next[newRecipeForDay] = recipe.id;
-            setDays(next);
+            setDay(newRecipeForDay, { recipe_id: recipe.id, special: null });
             setNewRecipeForDay(null);
           }}
         />

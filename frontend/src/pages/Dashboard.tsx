@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
-import { formatDate } from '../types';
-import type { ShoppingListSummary, Store } from '../types';
+import { DAY_NAMES, formatDate, specialLabel } from '../types';
+import type { ShoppingListSummary, Store, TodayMenu } from '../types';
 
 export default function DashboardPage() {
   const [pickingStore, setPickingStore] = useState(false);
@@ -17,6 +17,10 @@ export default function DashboardPage() {
   const { data: stores = [] } = useQuery<Store[]>({
     queryKey: ['stores'],
     queryFn: () => api('/stores'),
+  });
+  const { data: todayMenu } = useQuery<TodayMenu | null>({
+    queryKey: ['today-menu'],
+    queryFn: () => api('/shopping-lists/menu/today'),
   });
 
   const createQuick = useMutation({
@@ -38,6 +42,19 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      {todayMenu && (
+        <div className="bg-gradient-to-r from-emerald-600 to-emerald-500 text-white rounded-2xl shadow p-4">
+          <p className="text-xs uppercase tracking-wide text-emerald-100">
+            Vanavond · {DAY_NAMES[new Date().getDay()]}
+          </p>
+          <p className="text-lg font-bold mt-0.5">
+            {todayMenu.special ? specialLabel(todayMenu.special) : `🍽️ ${todayMenu.recipe_name}`}
+          </p>
+          {todayMenu.description && (
+            <p className="text-sm text-emerald-50 mt-1 line-clamp-2">{todayMenu.description}</p>
+          )}
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-3">
         <Link
           to="/weekly/new"

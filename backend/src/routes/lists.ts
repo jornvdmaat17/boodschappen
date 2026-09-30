@@ -87,8 +87,8 @@ listsRouter.post('/', async (req, res) => {
       const planId = planRows[0].id;
       for (const day of days || []) {
         await client.query(
-          'INSERT INTO meal_plan_days (meal_plan_id, day_of_week, recipe_id) VALUES ($1, $2, $3)',
-          [planId, day.day_of_week, day.recipe_id || null]
+          'INSERT INTO meal_plan_days (meal_plan_id, day_of_week, recipe_id, special) VALUES ($1, $2, $3, $4)',
+          [planId, day.day_of_week, day.recipe_id || null, day.special || null]
         );
       }
       await syncAutoItems(client, list.id);
@@ -102,6 +102,25 @@ listsRouter.post('/', async (req, res) => {
   } finally {
     client.release();
   }
+});
+
+// What's for dinner today, according to the weekly list covering this week.
+listsRouter.get('/menu/today', async (_req, res) => {
+  const { rows } = await query(
+    `SELECT mpd.recipe_id, mpd.special, r.name AS recipe_name, r.description
+     FROM shopping_lists sl
+     JOIN weekly_meal_plans wmp ON wmp.shopping_list_id = sl.id
+     JOIN meal_plan_days mpd ON mpd.meal_plan_id = wmp.id
+       AND mpd.day_of_week = EXTRACT(DOW FROM CURRENT_DATE)::int
+     LEFT JOIN recipes r ON r.id = mpd.recipe_id
+     WHERE sl.type = 'weekly' AND sl.shopping_date BETWEEN CURRENT_DATE - 6 AND CURRENT_DATE
+     ORDER BY sl.shopping_date DESC, sl.created_at DESC
+     LIMIT 1`
+  );
+  if (rows.length === 0 || (rows[0].recipe_id === null && rows[0].special === null)) {
+    return res.json(null);
+  }
+  res.json(rows[0]);
 });
 
 listsRouter.get('/:id', async (req, res) => {
@@ -128,7 +147,7 @@ listsRouter.get('/:id', async (req, res) => {
   let mealPlan = null;
   if (list.type === 'weekly') {
     const { rows: planDays } = await query(
-      `SELECT mpd.day_of_week, mpd.recipe_id, r.name AS recipe_name
+      `SELECT mpd.day_of_week, mpd.recipe_id, mpd.special, r.name AS recipe_name
        FROM weekly_meal_plans wmp
        JOIN meal_plan_days mpd ON mpd.meal_plan_id = wmp.id
        LEFT JOIN recipes r ON r.id = mpd.recipe_id
@@ -221,7 +240,7 @@ listsRouter.put('/:id/items/:productId', async (req, res) => {
 });
 
 listsRouter.put('/:id/meal-plan/:day', async (req, res) => {
-  const { recipe_id, optional_include } = req.body || {};
+  const { recipe_id, special, optional_include } = req.body || {};
   const day = Number(req.params.day);
   const client = await pool.connect();
   try {
@@ -235,9 +254,10 @@ listsRouter.put('/:id/meal-plan/:day', async (req, res) => {
       return res.status(404).json({ error: 'No meal plan for this list' });
     }
     await client.query(
-      `INSERT INTO meal_plan_days (meal_plan_id, day_of_week, recipe_id) VALUES ($1, $2, $3)
-       ON CONFLICT (meal_plan_id, day_of_week) DO UPDATE SET recipe_id = EXCLUDED.recipe_id`,
-      [planRows[0].id, day, recipe_id || null]
+      `INSERT INTO meal_plan_days (meal_plan_id, day_of_week, recipe_id, special) VALUES ($1, $2, $3, $4)
+       ON CONFLICT (meal_plan_id, day_of_week)
+       DO UPDATE SET recipe_id = EXCLUDED.recipe_id, special = EXCLUDED.special`,
+      [planRows[0].id, day, recipe_id || null, special || null]
     );
     await syncAutoItems(client, Number(req.params.id));
     if (recipe_id && Array.isArray(optional_include) && optional_include.length > 0) {
