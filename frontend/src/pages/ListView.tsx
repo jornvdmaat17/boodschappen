@@ -7,6 +7,7 @@ import { useListRoom } from '../hooks/useSocket';
 import ProductPicker from '../components/ProductPicker';
 import QtyControl from '../components/QtyControl';
 import OptionalItemsModal from '../components/OptionalItemsModal';
+import ImportRecipeModal from '../components/ImportRecipeModal';
 import { DAY_NAMES, SPECIAL_DAYS, formatDate } from '../types';
 import type { ShoppingListDetail, Recipe, ListItem, RecipeProduct, MealPlanDay } from '../types';
 
@@ -294,6 +295,7 @@ function MealPlanEditor({
   const [asking, setAsking] = useState<{ day: number; recipeId: number; products: RecipeProduct[] } | null>(
     null
   );
+  const [aiDay, setAiDay] = useState<number | null>(null);
   const { data: recipes = [] } = useQuery<Recipe[]>({ queryKey: ['recipes'], queryFn: () => api('/recipes') });
 
   const updateDay = useMutation({
@@ -358,8 +360,28 @@ function MealPlanEditor({
               </option>
             ))}
           </select>
+          {!disabled && (
+            <button
+              onClick={() => setAiDay(day)}
+              className="text-sm"
+              title="Laat AI iets bedenken dat afwijkt van de rest van de week"
+            >
+              ✨
+            </button>
+          )}
         </div>
       ))}
+      {aiDay !== null && (
+        <ImportRecipeModal
+          initialMode="ai"
+          avoidNames={plan.map((d) => d.recipe_name).filter((n): n is string => !!n)}
+          onClose={() => setAiDay(null)}
+          onCreated={(recipe) => {
+            updateDay.mutate({ day: aiDay, recipe_id: recipe.id, special: null, optional_include: [] });
+            setAiDay(null);
+          }}
+        />
+      )}
       {asking && (
         <OptionalItemsModal
           products={asking.products}
