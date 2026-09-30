@@ -47,13 +47,13 @@ export default function ProductsPage() {
 
       <div className="bg-white rounded-xl shadow p-4 space-y-2">
         <p className="text-sm font-medium">Nieuw product</p>
-        <div className="flex flex-col sm:flex-row gap-2">
+        <div className="flex flex-col gap-2">
           <input
             type="text"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             placeholder="Naam"
-            className="flex-1 min-w-0 border border-stone-300 rounded-lg px-3 py-2 text-sm"
+            className="w-full min-w-0 border border-stone-300 rounded-lg px-3 py-2 text-sm"
           />
           <div className="flex gap-2">
             <select
