@@ -3,10 +3,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
 import ProductPicker from '../components/ProductPicker';
 import QtyControl from '../components/QtyControl';
+import ImportRecipeModal from '../components/ImportRecipeModal';
 import type { Recipe, RecipeProduct } from '../types';
 
 export default function RecipesPage() {
   const [editing, setEditing] = useState<Recipe | 'new' | null>(null);
+  const [importing, setImporting] = useState(false);
   const queryClient = useQueryClient();
 
   const { data: recipes = [] } = useQuery<Recipe[]>({ queryKey: ['recipes'], queryFn: () => api('/recipes') });
@@ -20,13 +22,23 @@ export default function RecipesPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold">Recepten</h1>
-        <button
-          onClick={() => setEditing('new')}
-          className="bg-emerald-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-emerald-700"
-        >
-          + Nieuw recept
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setImporting(true)}
+            className="bg-white border border-emerald-600 text-emerald-700 text-sm px-3 py-2 rounded-lg hover:bg-emerald-50"
+          >
+            🔗 Importeer
+          </button>
+          <button
+            onClick={() => setEditing('new')}
+            className="bg-emerald-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-emerald-700"
+          >
+            + Nieuw recept
+          </button>
+        </div>
       </div>
+
+      {importing && <ImportRecipeModal onClose={() => setImporting(false)} />}
 
       {editing && (
         <RecipeForm
@@ -39,7 +51,19 @@ export default function RecipesPage() {
         {recipes.map((r) => (
           <div key={r.id} className="bg-white rounded-xl shadow p-4">
             <div className="flex items-center justify-between">
-              <h2 className="font-medium">{r.name}</h2>
+              <h2 className="font-medium">
+                {r.name}
+                {r.source_url && (
+                  <a
+                    href={r.source_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="ml-2 text-xs font-normal text-emerald-700 underline decoration-dotted"
+                  >
+                    bron ↗
+                  </a>
+                )}
+              </h2>
               <div className="flex gap-3 text-sm">
                 <button onClick={() => setEditing(r)} className="text-emerald-700">
                   Bewerken

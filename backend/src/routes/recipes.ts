@@ -19,6 +19,76 @@ recipesRouter.get('/', async (_req, res) => {
 
 type RecipeItemInput = { product_id: number; quantity?: number; optional?: boolean };
 
+const BROWSER_UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36';
+
+function isAllowedUrl(u: URL): boolean {
+  if (!['http:', 'https:'].includes(u.protocol)) return false;
+  const h = u.hostname;
+  if (!h.includes('.') || h === 'localhost') return false;
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(h) || h.includes(':')) return false;
+  if (h.endsWith('.local') || h.endsWith('.internal')) return false;
+  return true;
+}
+
+function findRecipeNode(html: string): any | null {
+  const blocks = [...html.matchAll(/<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g)];
+  for (const m of blocks) {
+    try {
+      const data = JSON.parse(m[1]);
+      const nodes = Array.isArray(data) ? data : data['@graph'] ? data['@graph'] : [data];
+      for (const n of nodes) {
+        const t = n?.['@type'];
+        if (t === 'Recipe' || (Array.isArray(t) && t.includes('Recipe'))) return n;
+      }
+    } catch {
+      // ignore malformed blocks
+    }
+  }
+  return null;
+}
+
+// Fetches a recipe page and extracts name + ingredients from its schema.org data.
+recipesRouter.post('/import-url', async (req, res) => {
+  const { url } = req.body || {};
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return res.status(400).json({ error: 'Ongeldige URL' });
+  }
+  if (!isAllowedUrl(parsed)) return res.status(400).json({ error: 'Deze URL is niet toegestaan' });
+
+  let response: Response;
+  try {
+    response = await fetch(parsed.href, {
+      headers: {
+        'User-Agent': BROWSER_UA,
+        Accept: 'text/html,application/xhtml+xml',
+        'Accept-Language': 'nl-NL,nl;q=0.9,en;q=0.8',
+      },
+      redirect: 'follow',
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch {
+    return res.status(502).json({ error: 'Kon de pagina niet ophalen' });
+  }
+  if (response.status === 403) {
+    return res.status(422).json({
+      error: 'Deze website blokkeert automatisch ophalen (o.a. ah.nl). Probeer een andere receptensite.',
+    });
+  }
+  if (!response.ok) return res.status(422).json({ error: `Pagina gaf status ${response.status}` });
+
+  const html = (await response.text()).slice(0, 3_000_000);
+  const recipe = findRecipeNode(html);
+  if (!recipe) {
+    return res.status(422).json({ error: 'Geen recept gevonden op deze pagina' });
+  }
+  const ingredients = (recipe.recipeIngredient || []).map((s: unknown) => String(s).trim()).filter(Boolean);
+  res.json({ name: String(recipe.name || '').trim() || 'Recept', source_url: parsed.href, ingredients });
+});
+
 function normalizeItems(body: any): RecipeItemInput[] {
   if (Array.isArray(body?.items)) return body.items;
   if (Array.isArray(body?.product_ids)) return body.product_ids.map((id: number) => ({ product_id: id }));
@@ -26,13 +96,16 @@ function normalizeItems(body: any): RecipeItemInput[] {
 }
 
 recipesRouter.post('/', async (req, res) => {
-  const { name } = req.body || {};
+  const { name, source_url } = req.body || {};
   if (!name?.trim()) return res.status(400).json({ error: 'Name required' });
   const items = normalizeItems(req.body);
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const { rows } = await client.query('INSERT INTO recipes (name) VALUES ($1) RETURNING *', [name.trim()]);
+    const { rows } = await client.query(
+      'INSERT INTO recipes (name, source_url) VALUES ($1, $2) RETURNING *',
+      [name.trim(), source_url || null]
+    );
     const recipe = rows[0];
     for (const item of items) {
       await client.query(

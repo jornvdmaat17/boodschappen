@@ -29,6 +29,7 @@ export interface RecipeProduct extends Product {
 export interface Recipe {
   id: number;
   name: string;
+  source_url: string | null;
   products: RecipeProduct[];
 }
 
