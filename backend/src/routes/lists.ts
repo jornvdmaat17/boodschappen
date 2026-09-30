@@ -199,17 +199,24 @@ listsRouter.delete('/:id/items/:productId', async (req, res) => {
 });
 
 listsRouter.put('/:id/items/:productId', async (req, res) => {
-  const { checked } = req.body || {};
+  const { checked, quantity } = req.body || {};
   const { rows } = await query(
-    'UPDATE shopping_list_items SET checked = $1 WHERE shopping_list_id = $2 AND product_id = $3 RETURNING *',
-    [!!checked, req.params.id, req.params.productId]
+    `UPDATE shopping_list_items SET
+       checked = COALESCE($1, checked),
+       quantity = GREATEST(1, COALESCE($2, quantity))
+     WHERE shopping_list_id = $3 AND product_id = $4 RETURNING *`,
+    [checked ?? null, quantity ?? null, req.params.id, req.params.productId]
   );
   if (rows.length === 0) return res.status(404).json({ error: 'Not found' });
-  emitToList(req.params.id, 'list:item_toggled', {
-    listId: Number(req.params.id),
-    productId: Number(req.params.productId),
-    checked: !!checked,
-  });
+  if (checked !== undefined) {
+    emitToList(req.params.id, 'list:item_toggled', {
+      listId: Number(req.params.id),
+      productId: Number(req.params.productId),
+      checked: !!checked,
+    });
+  } else {
+    emitToList(req.params.id, 'list:updated', { listId: Number(req.params.id) });
+  }
   res.json(rows[0]);
 });
 

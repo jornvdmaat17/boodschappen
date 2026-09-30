@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { useListRoom } from '../hooks/useSocket';
 import ProductPicker from '../components/ProductPicker';
+import QtyControl from '../components/QtyControl';
 import OptionalItemsModal from '../components/OptionalItemsModal';
 import { DAY_NAMES, formatDate } from '../types';
 import type { ShoppingListDetail, Recipe, ListItem, RecipeProduct } from '../types';
@@ -49,6 +50,22 @@ export default function ListViewPage() {
     mutationFn: (product_id: number) =>
       api(`/shopping-lists/${listId}/items`, { method: 'POST', body: JSON.stringify({ product_id }) }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['list', listId] }),
+  });
+
+  const setItemQty = useMutation({
+    mutationFn: ({ productId, quantity }: { productId: number; quantity: number }) =>
+      api(`/shopping-lists/${listId}/items/${productId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ quantity }),
+      }),
+    onMutate: ({ productId, quantity }) => {
+      queryClient.setQueryData<ShoppingListDetail>(['list', listId], (old) =>
+        old
+          ? { ...old, items: old.items.map((i) => (i.product_id === productId ? { ...i, quantity } : i)) }
+          : old
+      );
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['list', listId] }),
   });
 
   const removeItem = useMutation({
@@ -218,10 +235,18 @@ export default function ListViewPage() {
                     onChange={(e) => toggleItem.mutate({ productId: item.product_id, checked: e.target.checked })}
                     className="w-5 h-5 accent-emerald-600"
                   />
-                  <span className={`flex-1 text-sm ${item.checked ? 'line-through text-stone-400' : ''}`}>
-                    {item.quantity >= 2 && <b className="text-emerald-700 mr-1">{item.quantity}×</b>}
+                  <span className={`flex-1 min-w-0 text-sm ${item.checked ? 'line-through text-stone-400' : ''}`}>
+                    {(done || item.checked) && item.quantity >= 2 && (
+                      <b className="text-emerald-700 mr-1">{item.quantity}×</b>
+                    )}
                     {item.product_name}
                   </span>
+                  {!done && !item.checked && (
+                    <QtyControl
+                      value={item.quantity}
+                      onChange={(q) => setItemQty.mutate({ productId: item.product_id, quantity: q })}
+                    />
+                  )}
                   {!done && (
                     <button
                       onClick={() => removeItem.mutate(item.product_id)}
