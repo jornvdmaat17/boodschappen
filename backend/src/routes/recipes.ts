@@ -100,13 +100,18 @@ Gebruik waar mogelijk exact deze bestaande productnamen: ${productNames}`;
     return res.status(422).json({ error: `Cloudflare AI fout: ${detail}` });
   }
 
-  const text: string = data.result?.response ?? '';
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  // Depending on the model, `response` is either a string or an already-parsed object.
+  const raw = data.result?.response;
   let parsed: any = null;
-  try {
-    parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : null;
-  } catch {
-    parsed = null;
+  if (raw && typeof raw === 'object') {
+    parsed = raw;
+  } else if (typeof raw === 'string') {
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    try {
+      parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : null;
+    } catch {
+      parsed = null;
+    }
   }
   if (!parsed?.name || !Array.isArray(parsed.ingredients)) {
     return res.status(422).json({ error: 'AI gaf geen bruikbaar recept terug, probeer opnieuw' });
