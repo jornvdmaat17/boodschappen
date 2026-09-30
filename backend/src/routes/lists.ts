@@ -66,7 +66,7 @@ async function addOptionalFromMealPlan(client: PoolClient, listId: number, produ
 }
 
 listsRouter.post('/', async (req, res) => {
-  const { type, store_id, days, optional_include } = req.body || {};
+  const { type, store_id, days, optional_include, shopping_date } = req.body || {};
   if (!['weekly', 'quick'].includes(type)) return res.status(400).json({ error: 'type must be weekly or quick' });
   if (!store_id) return res.status(400).json({ error: 'store_id required' });
 
@@ -74,8 +74,8 @@ listsRouter.post('/', async (req, res) => {
   try {
     await client.query('BEGIN');
     const { rows } = await client.query(
-      'INSERT INTO shopping_lists (store_id, type) VALUES ($1, $2) RETURNING *',
-      [store_id, type]
+      'INSERT INTO shopping_lists (store_id, type, shopping_date) VALUES ($1, $2, COALESCE($3::date, CURRENT_DATE)) RETURNING *',
+      [store_id, type, shopping_date || null]
     );
     const list = rows[0];
 
@@ -142,13 +142,14 @@ listsRouter.get('/:id', async (req, res) => {
 });
 
 listsRouter.put('/:id', async (req, res) => {
-  const { completed, store_id } = req.body || {};
+  const { completed, store_id, shopping_date } = req.body || {};
   const { rows } = await query(
     `UPDATE shopping_lists SET
        completed_at = CASE WHEN $1::boolean IS NULL THEN completed_at WHEN $1 THEN NOW() ELSE NULL END,
-       store_id = COALESCE($2, store_id)
-     WHERE id = $3 RETURNING *`,
-    [completed ?? null, store_id ?? null, req.params.id]
+       store_id = COALESCE($2, store_id),
+       shopping_date = COALESCE($3::date, shopping_date)
+     WHERE id = $4 RETURNING *`,
+    [completed ?? null, store_id ?? null, shopping_date ?? null, req.params.id]
   );
   if (rows.length === 0) return res.status(404).json({ error: 'Not found' });
   emitToList(req.params.id, 'list:updated', { listId: Number(req.params.id) });

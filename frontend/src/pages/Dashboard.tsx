@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
+import { formatDate } from '../types';
 import type { ShoppingListSummary, Store } from '../types';
 
 export default function DashboardPage() {
@@ -93,7 +94,9 @@ export default function DashboardPage() {
                   <span className="font-medium">
                     {list.type === 'weekly' ? '📅 Weeklijst' : '⚡ Snelle lijst'}
                   </span>
-                  <span className="text-stone-500 text-sm ml-2">{list.store_name}</span>
+                  <span className="text-stone-500 text-sm ml-2">
+                    {list.store_name} · {formatDate(list.shopping_date)}
+                  </span>
                 </div>
                 <span className="text-sm text-stone-500">
                   {list.checked_count}/{list.item_count}
@@ -119,8 +122,7 @@ export default function DashboardPage() {
             {completed.slice(0, 10).map((list) => (
               <div key={list.id} className="bg-white/60 rounded-xl p-3 flex items-center justify-between text-sm">
                 <Link to={`/list/${list.id}`} className="text-stone-600">
-                  {list.type === 'weekly' ? '📅' : '⚡'} {list.store_name} —{' '}
-                  {new Date(list.created_at).toLocaleDateString('nl-NL')}
+                  {list.type === 'weekly' ? '📅' : '⚡'} {list.store_name} — {formatDate(list.shopping_date)}
                 </Link>
                 <button
                   onClick={() => deleteList.mutate(list.id)}

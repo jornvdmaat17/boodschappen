@@ -6,7 +6,7 @@ import { api } from '../api/client';
 import { useListRoom } from '../hooks/useSocket';
 import ProductPicker from '../components/ProductPicker';
 import OptionalItemsModal from '../components/OptionalItemsModal';
-import { DAY_NAMES } from '../types';
+import { DAY_NAMES, formatDate } from '../types';
 import type { ShoppingListDetail, Recipe, ListItem, RecipeProduct } from '../types';
 
 export default function ListViewPage() {
@@ -78,6 +78,15 @@ export default function ListViewPage() {
     },
   });
 
+  const setDate = useMutation({
+    mutationFn: (shopping_date: string) =>
+      api(`/shopping-lists/${listId}`, { method: 'PUT', body: JSON.stringify({ shopping_date }) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['list', listId] });
+      queryClient.invalidateQueries({ queryKey: ['lists'] });
+    },
+  });
+
   const items = list?.items;
 
   // Auto-collapse a category the moment its last item is checked, with a small
@@ -131,9 +140,19 @@ export default function ListViewPage() {
           <h1 className="text-xl font-bold">
             {list.type === 'weekly' ? '📅 Weeklijst' : '⚡ Snelle lijst'}
           </h1>
-          <p className="text-sm text-stone-500">
-            {list.store_name} · {checkedCount}/{list.items.length} gedaan
-            {done && ' · afgerond'}
+          <p className="text-sm text-stone-500 flex items-center gap-1 flex-wrap">
+            <span>{list.store_name} ·</span>
+            {done ? (
+              <span>{formatDate(list.shopping_date)}</span>
+            ) : (
+              <input
+                type="date"
+                value={list.shopping_date.slice(0, 10)}
+                onChange={(e) => e.target.value && setDate.mutate(e.target.value)}
+                className="border border-stone-200 rounded px-1 py-0.5 text-xs text-stone-600 bg-white"
+              />
+            )}
+            <span>· {checkedCount}/{list.items.length} gedaan{done && ' · afgerond'}</span>
           </p>
         </div>
         <Link to="/" className="text-sm text-emerald-700">

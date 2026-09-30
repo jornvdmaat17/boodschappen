@@ -8,8 +8,15 @@ import OptionalItemsModal from '../components/OptionalItemsModal';
 import { DAY_NAMES } from '../types';
 import type { Recipe, Store, RecipeProduct } from '../types';
 
+function nextSunday(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + ((7 - d.getDay()) % 7));
+  return d.toISOString().slice(0, 10);
+}
+
 export default function WeeklyCreatePage() {
   const [storeId, setStoreId] = useState<number | ''>('');
+  const [shoppingDate, setShoppingDate] = useState(nextSunday());
   const [days, setDays] = useState<(number | null)[]>(Array(7).fill(null));
   const [newRecipeForDay, setNewRecipeForDay] = useState<number | null>(null);
   const [askOptional, setAskOptional] = useState<RecipeProduct[] | null>(null);
@@ -27,6 +34,7 @@ export default function WeeklyCreatePage() {
           store_id: storeId,
           days: days.map((recipe_id, day_of_week) => ({ day_of_week, recipe_id })),
           optional_include,
+          shopping_date: shoppingDate,
         }),
       }),
     onSuccess: (list: any) => navigate(`/list/${list.id}`),
@@ -47,6 +55,13 @@ export default function WeeklyCreatePage() {
       <h1 className="text-xl font-bold">Nieuwe weeklijst</h1>
 
       <div className="bg-white rounded-xl shadow p-4">
+        <label className="text-sm font-medium block mb-1">Boodschappendag</label>
+        <input
+          type="date"
+          value={shoppingDate}
+          onChange={(e) => setShoppingDate(e.target.value)}
+          className="w-full border border-stone-300 rounded-lg px-3 py-2 mb-3"
+        />
         <label className="text-sm font-medium block mb-1">Winkel</label>
         {stores.length === 0 ? (
           <p className="text-sm text-stone-500">

@@ -46,6 +46,7 @@ export interface ShoppingListSummary {
   store_id: number;
   store_name: string;
   type: 'weekly' | 'quick';
+  shopping_date: string;
   created_at: string;
   completed_at: string | null;
   item_count: number;
@@ -76,6 +77,10 @@ export interface ShoppingListDetail extends ShoppingListSummary {
 }
 
 export const DAY_NAMES = ['Zondag', 'Maandag', 'Dinsdag', 'Woensdag', 'Donderdag', 'Vrijdag', 'Zaterdag'];
+
+export function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' });
+}
 
 export const FREQUENCIES = [
   { value: 'weekly', label: 'Wekelijks' },

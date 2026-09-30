@@ -62,6 +62,7 @@ CREATE TABLE shopping_lists (
   id SERIAL PRIMARY KEY,
   store_id INT NOT NULL REFERENCES stores(id),
   type VARCHAR(20) NOT NULL CHECK (type IN ('weekly', 'quick')),
+  shopping_date DATE NOT NULL DEFAULT CURRENT_DATE,
   created_at TIMESTAMP DEFAULT NOW(),
   completed_at TIMESTAMP
 );
