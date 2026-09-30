@@ -1,0 +1,55 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: boodschappen-db
+    environment:
+      POSTGRES_USER: boodschappen
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-boodschappen}
+      POSTGRES_DB: boodschappen
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U boodschappen"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    container_name: boodschappen-backend
+    environment:
+      DATABASE_URL: postgres://boodschappen:${DB_PASSWORD:-boodschappen}@postgres:5432/boodschappen
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-jorn.vandermaat@blueprintautomation.nl}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-boodschappen}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:8085}
+      NODE_ENV: production
+      PORT: 5000
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    container_name: boodschappen-frontend
+    ports:
+      - "8085:80"
+    depends_on:
+      - backend
+    networks:
+      - app-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
+networks:
+  app-network:
+    driver: bridge
