@@ -147,7 +147,9 @@ export default function WeeklyCreatePage() {
       {aiForDay !== null && (
         <ImportRecipeModal
           initialMode="ai"
-          avoidNames={recipes.filter((r) => days.some((d) => d.recipe_id === r.id)).map((r) => r.name)}
+          avoid={recipes
+            .filter((r) => days.some((d) => d.recipe_id === r.id))
+            .map((r) => ({ name: r.name, products: r.products.map((p) => p.name) }))}
           onClose={() => setAiForDay(null)}
           onCreated={(recipe) => {
             setDay(aiForDay, { recipe_id: recipe.id, special: null });

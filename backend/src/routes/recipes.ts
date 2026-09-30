@@ -132,13 +132,27 @@ async function askWorkersAi(
 // existing product names so the ingredient matching lands automatically.
 recipesRouter.post('/generate', async (req, res) => {
   const { prompt, avoid } = req.body || {};
-  const avoidNames = (Array.isArray(avoid) ? avoid : [])
-    .map((s: unknown) => String(s).trim())
-    .filter(Boolean)
+  // avoid entries: recipe names (string) or {name, products: string[]}
+  const avoidEntries = (Array.isArray(avoid) ? avoid : [])
+    .map((entry: any) => {
+      if (typeof entry === 'string') return { name: entry.trim(), products: [] as string[] };
+      const name = String(entry?.name ?? '').trim();
+      const products = (Array.isArray(entry?.products) ? entry.products : [])
+        .map((p: unknown) => String(p).trim())
+        .filter(Boolean)
+        .slice(0, 20);
+      return { name, products };
+    })
+    .filter((e: { name: string }) => e.name)
     .slice(0, 14);
   const avoidRule =
-    avoidNames.length > 0
-      ? `\nDeze week staat al op het menu: ${avoidNames.join(', ')}. Bedenk iets dat hier duidelijk van verschilt (andere keuken of ander hoofdingrediënt).`
+    avoidEntries.length > 0
+      ? `\nDeze week staat al op het menu:\n${avoidEntries
+          .map((e: { name: string; products: string[] }) =>
+            e.products.length > 0 ? `- ${e.name} (met: ${e.products.join(', ')})` : `- ${e.name}`
+          )
+          .join('\n')}
+Bedenk iets dat hier duidelijk van verschilt: andere keuken en vooral andere hoofdingrediënten dan hierboven.`
       : '';
   const system = `Je bent een Nederlandse thuiskok. Bedenk één avondmaaltijd-recept dat past bij de wens van de gebruiker (voor 2 personen).${avoidRule}
 ${JSON_FORMAT_RULES}

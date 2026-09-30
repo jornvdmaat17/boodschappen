@@ -82,16 +82,21 @@ function suggestProduct(line: string, products: Product[]): Product | null {
   return best;
 }
 
+export interface AvoidRecipe {
+  name: string;
+  products: string[];
+}
+
 interface Props {
   onClose: () => void;
   /** When set, the saved recipe is reported back (e.g. to assign it to a weekday). */
   onCreated?: (recipe: { id: number; name: string }) => void;
   initialMode?: 'url' | 'text' | 'ai';
-  /** Recipe names already planned this week; the AI avoids something similar. */
-  avoidNames?: string[];
+  /** Recipes (with their products) already planned this week; the AI avoids similar meals. */
+  avoid?: AvoidRecipe[];
 }
 
-export default function ImportRecipeModal({ onClose, onCreated, initialMode, avoidNames = [] }: Props) {
+export default function ImportRecipeModal({ onClose, onCreated, initialMode, avoid = [] }: Props) {
   const [mode, setMode] = useState<'url' | 'text' | 'ai'>(initialMode ?? 'url');
   const [url, setUrl] = useState('');
   const [pastedText, setPastedText] = useState('');
@@ -138,7 +143,7 @@ export default function ImportRecipeModal({ onClose, onCreated, initialMode, avo
     mutationFn: async () => {
       const generated = await api<ImportResult>('/recipes/generate', {
         method: 'POST',
-        body: JSON.stringify({ prompt: aiPrompt, avoid: avoidNames }),
+        body: JSON.stringify({ prompt: aiPrompt, avoid }),
       });
       const prods = await queryClient.fetchQuery<Product[]>({
         queryKey: ['products'],
@@ -291,8 +296,10 @@ export default function ImportRecipeModal({ onClose, onCreated, initialMode, avo
             {mode === 'ai' && (
               <>
                 <p className="text-sm text-stone-500">
-                  {avoidNames.length > 0
-                    ? `Beschrijf waar je zin in hebt (mag leeg). De AI bedenkt iets anders dan: ${avoidNames.join(', ')}.`
+                  {avoid.length > 0
+                    ? `Beschrijf waar je zin in hebt (mag leeg). De AI bedenkt iets anders dan: ${avoid
+                        .map((a) => a.name)
+                        .join(', ')}.`
                     : 'Beschrijf waar je zin in hebt en de AI bedenkt een recept met jullie producten.'}
                 </p>
                 <textarea
@@ -305,7 +312,7 @@ export default function ImportRecipeModal({ onClose, onCreated, initialMode, avo
                 />
                 <button
                   onClick={() => generateRecipe.mutate()}
-                  disabled={(!aiPrompt.trim() && avoidNames.length === 0) || generateRecipe.isPending}
+                  disabled={(!aiPrompt.trim() && avoid.length === 0) || generateRecipe.isPending}
                   className="w-full bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-emerald-700 disabled:opacity-40"
                 >
                   {generateRecipe.isPending ? 'Even denken...' : '✨ Genereer recept'}

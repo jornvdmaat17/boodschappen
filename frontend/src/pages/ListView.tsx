@@ -374,7 +374,16 @@ function MealPlanEditor({
       {aiDay !== null && (
         <ImportRecipeModal
           initialMode="ai"
-          avoidNames={plan.map((d) => d.recipe_name).filter((n): n is string => !!n)}
+          avoid={plan
+            .filter((d) => d.recipe_id !== null)
+            .map((d) => {
+              const recipe = recipes.find((r) => r.id === d.recipe_id);
+              return {
+                name: d.recipe_name ?? '',
+                products: recipe?.products.map((p) => p.name) ?? [],
+              };
+            })
+            .filter((a) => a.name)}
           onClose={() => setAiDay(null)}
           onCreated={(recipe) => {
             updateDay.mutate({ day: aiDay, recipe_id: recipe.id, special: null, optional_include: [] });
