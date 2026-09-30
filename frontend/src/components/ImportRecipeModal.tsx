@@ -20,17 +20,63 @@ function escapeRegExp(s: string) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-// Suggest the longest product whose name appears as a word in the ingredient line.
+// English names for common Dutch grocery products, since Instagram captions
+// are often in English. Keyed by the Dutch product name.
+const EN_SYNONYMS: Record<string, string[]> = {
+  knoflook: ['garlic'],
+  courgette: ['zucchini'],
+  ui: ['onion'],
+  'rode ui': ['red onion'],
+  uien: ['onions'],
+  olijfolie: ['olive oil'],
+  tomaten: ['tomato', 'tomatoes'],
+  cherrytomaten: ['cherry tomatoes'],
+  tomatenblokjes: ['canned tomatoes', 'chopped tomatoes'],
+  aardappelen: ['potato', 'potatoes'],
+  paprika: ['bell pepper', 'pepper'],
+  wortels: ['carrot', 'carrots'],
+  champignons: ['mushroom', 'mushrooms'],
+  spinazie: ['spinach'],
+  kipfilet: ['chicken breast', 'chicken'],
+  gehakt: ['minced meat', 'ground beef', 'mince'],
+  kaas: ['cheese'],
+  eieren: ['egg', 'eggs'],
+  melk: ['milk'],
+  slagroom: ['cream', 'heavy cream'],
+  boter: ['butter'],
+  citroen: ['lemon'],
+  limoen: ['lime'],
+  rijst: ['rice'],
+  kikkererwten: ['chickpeas'],
+  kidneybonen: ['kidney beans'],
+  kokosmelk: ['coconut milk'],
+  komijn: ['cumin'],
+  kurkuma: ['turmeric'],
+  pesto: ['pesto'],
+  feta: ['feta'],
+  broccoli: ['broccoli'],
+  bloemkool: ['cauliflower'],
+  prei: ['leek'],
+  sla: ['lettuce'],
+  avocado: ['avocado'],
+};
+
+// Suggest the longest product whose name (or English synonym) appears as a word
+// in the ingredient line.
 function suggestProduct(line: string, products: Product[]): Product | null {
   const lower = line.toLowerCase();
   let best: Product | null = null;
+  let bestLen = 0;
   for (const p of products) {
     const name = p.name.toLowerCase();
-    const variants = [name, `${name}s`, `${name}en`];
-    const hit = variants.some((v) =>
-      new RegExp(`(^|[^a-zà-ÿ])${escapeRegExp(v)}([^a-zà-ÿ]|$)`).test(lower)
-    );
-    if (hit && (!best || name.length > best.name.length)) best = p;
+    const variants = [name, `${name}s`, `${name}en`, ...(EN_SYNONYMS[name] ?? [])];
+    for (const v of variants) {
+      const hit = new RegExp(`(^|[^a-zà-ÿ])${escapeRegExp(v)}([^a-zà-ÿ]|$)`).test(lower);
+      if (hit && v.length > bestLen) {
+        best = p;
+        bestLen = v.length;
+      }
+    }
   }
   return best;
 }
@@ -80,10 +126,18 @@ export default function ImportRecipeModal({ onClose }: { onClose: () => void }) 
       queryKey: ['products'],
       queryFn: () => api('/products'),
     });
+    // Split on newlines, then break prose lines apart on commas and "and"/"en",
+    // so "pasta, garlic and zucchini" becomes separate rows.
     const lines = pastedText
       .split('\n')
-      .map((l) => l.replace(/^[-•*·]\s*/, '').trim())
-      .filter((l) => l.length > 0 && l.length <= 100)
+      .flatMap((l) => l.split(/,|\ben\b|\band\b|&/i))
+      .map((l) =>
+        l
+          .replace(/^[-•*·]\s*/, '')
+          .replace(/[.!?:;]+$/, '')
+          .trim()
+      )
+      .filter((l) => l.length > 1 && l.length <= 100)
       .slice(0, 60);
     setError('');
     setSourceUrl(textUrl.trim());
