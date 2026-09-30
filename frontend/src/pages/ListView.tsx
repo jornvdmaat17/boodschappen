@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import confetti from 'canvas-confetti';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { useListRoom } from '../hooks/useSocket';
@@ -12,6 +13,9 @@ export default function ListViewPage() {
   const listId = Number(id);
   const [showMealPlan, setShowMealPlan] = useState(false);
   const [showAddRecipe, setShowAddRecipe] = useState(false);
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const prevComplete = useRef<Record<string, boolean> | null>(null);
+  const prevAllDone = useRef<boolean | null>(null);
   const queryClient = useQueryClient();
 
   const { data: list, isLoading } = useQuery<ShoppingListDetail>({
@@ -70,6 +74,40 @@ export default function ListViewPage() {
     },
   });
 
+  const items = list?.items;
+
+  // Auto-collapse a category the moment its last item is checked, with a small
+  // confetti burst; a bigger one when the whole list is done. Only on
+  // transitions, never on initial load.
+  useEffect(() => {
+    if (!items) return;
+    const completeNow: Record<string, boolean> = {};
+    for (const item of items) {
+      const key = item.category_name ?? 'overig';
+      completeNow[key] = (completeNow[key] ?? true) && item.checked;
+    }
+    const allDone = items.length > 0 && items.every((i) => i.checked);
+    const prev = prevComplete.current;
+    if (prev !== null) {
+      for (const [key, isDone] of Object.entries(completeNow)) {
+        if (isDone && prev[key] === false) {
+          setCollapsed((c) => ({ ...c, [key]: true }));
+          confetti({ particleCount: 45, spread: 70, startVelocity: 25, origin: { y: 0.6 } });
+        }
+      }
+      if (allDone && prevAllDone.current === false) {
+        confetti({ particleCount: 90, angle: 60, spread: 70, origin: { x: 0, y: 0.7 } });
+        confetti({ particleCount: 90, angle: 120, spread: 70, origin: { x: 1, y: 0.7 } });
+        setTimeout(
+          () => confetti({ particleCount: 120, spread: 120, startVelocity: 35, origin: { y: 0.5 } }),
+          250
+        );
+      }
+    }
+    prevComplete.current = completeNow;
+    prevAllDone.current = allDone;
+  }, [items]);
+
   if (isLoading || !list) return <p className="text-stone-500">Laden...</p>;
 
   const done = !!list.completed_at;
@@ -123,11 +161,28 @@ export default function ListViewPage() {
       )}
 
       <div className="space-y-3">
-        {groups.map((group, gi) => (
-          <div key={gi} className="bg-white rounded-xl shadow overflow-hidden">
-            <div className="px-4 py-2 bg-stone-50 text-xs font-semibold uppercase tracking-wide text-stone-500">
-              {group.name}
-            </div>
+        {groups.map((group) => {
+          const groupDone = group.items.every((i) => i.checked);
+          const groupChecked = group.items.filter((i) => i.checked).length;
+          const isCollapsed = collapsed[group.key] ?? false;
+          return (
+          <div key={group.key} className="bg-white rounded-xl shadow overflow-hidden">
+            <button
+              onClick={() => setCollapsed((c) => ({ ...c, [group.key]: !isCollapsed }))}
+              className={`w-full px-4 py-2 flex items-center justify-between text-xs font-semibold uppercase tracking-wide ${
+                groupDone ? 'bg-emerald-50 text-emerald-700' : 'bg-stone-50 text-stone-500'
+              }`}
+            >
+              <span>
+                {groupDone && '✓ '}
+                {group.name}
+              </span>
+              <span className="flex items-center gap-2 normal-case font-normal">
+                {groupChecked}/{group.items.length}
+                <span className="text-stone-400">{isCollapsed ? '▸' : '▾'}</span>
+              </span>
+            </button>
+            {!isCollapsed && (
             <div className="divide-y divide-stone-100">
               {group.items.map((item) => (
                 <div key={item.id} className="px-4 py-2.5 flex items-center gap-3">
@@ -153,8 +208,10 @@ export default function ListViewPage() {
                 </div>
               ))}
             </div>
+            )}
           </div>
-        ))}
+          );
+        })}
         {list.items.length === 0 && <p className="text-sm text-stone-500 text-center py-6">Nog geen producten.</p>}
       </div>
 
