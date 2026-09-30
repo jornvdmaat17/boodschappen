@@ -3,8 +3,9 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
 import ProductPicker from '../components/ProductPicker';
+import QtyControl from '../components/QtyControl';
 import { DAY_NAMES } from '../types';
-import type { Recipe, Store, Product } from '../types';
+import type { Recipe, Store, RecipeProduct } from '../types';
 
 export default function WeeklyCreatePage() {
   const [storeId, setStoreId] = useState<number | ''>('');
@@ -113,14 +114,17 @@ export default function WeeklyCreatePage() {
 
 function NewRecipeModal({ onClose, onCreated }: { onClose: () => void; onCreated: (r: Recipe) => void }) {
   const [name, setName] = useState('');
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<RecipeProduct[]>([]);
   const queryClient = useQueryClient();
 
   const create = useMutation({
     mutationFn: () =>
       api<Recipe>('/recipes', {
         method: 'POST',
-        body: JSON.stringify({ name, product_ids: products.map((p) => p.id) }),
+        body: JSON.stringify({
+          name,
+          items: products.map((p) => ({ product_id: p.id, quantity: p.quantity })),
+        }),
       }),
     onSuccess: (recipe) => {
       queryClient.invalidateQueries({ queryKey: ['recipes'] });
@@ -141,13 +145,24 @@ function NewRecipeModal({ onClose, onCreated }: { onClose: () => void; onCreated
           className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm"
         />
         <ProductPicker
-          onPick={(p) => setProducts((prev) => (prev.some((x) => x.id === p.id) ? prev : [...prev, p]))}
+          onPick={(p) =>
+            setProducts((prev) => (prev.some((x) => x.id === p.id) ? prev : [...prev, { ...p, quantity: 1 }]))
+          }
           excludeIds={products.map((p) => p.id)}
         />
         <div className="flex flex-wrap gap-1.5">
           {products.map((p) => (
-            <span key={p.id} className="bg-emerald-100 text-emerald-800 text-xs px-2 py-1 rounded-full flex items-center gap-1">
+            <span
+              key={p.id}
+              className="bg-emerald-100 text-emerald-800 text-xs px-2 py-1 rounded-full flex items-center gap-1.5"
+            >
               {p.name}
+              <QtyControl
+                value={p.quantity}
+                onChange={(q) =>
+                  setProducts((prev) => prev.map((x) => (x.id === p.id ? { ...x, quantity: q } : x)))
+                }
+              />
               <button onClick={() => setProducts((prev) => prev.filter((x) => x.id !== p.id))}>✕</button>
             </span>
           ))}

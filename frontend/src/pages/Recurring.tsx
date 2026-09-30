@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
 import ProductPicker from '../components/ProductPicker';
+import QtyControl from '../components/QtyControl';
 import { FREQUENCIES } from '../types';
 import type { RecurringItem } from '../types';
 
@@ -19,7 +20,7 @@ export default function RecurringPage() {
   });
 
   const updateItem = useMutation({
-    mutationFn: ({ id, ...body }: { id: number; frequency?: string; active?: boolean }) =>
+    mutationFn: ({ id, ...body }: { id: number; frequency?: string; active?: boolean; quantity?: number }) =>
       api(`/recurring-items/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['recurring'] }),
   });
@@ -51,6 +52,11 @@ export default function RecurringPage() {
               title="Actief"
             />
             <span className={`flex-1 text-sm ${item.active ? '' : 'text-stone-400'}`}>{item.product_name}</span>
+            <QtyControl
+              value={item.quantity}
+              onChange={(q) => updateItem.mutate({ id: item.id, quantity: q })}
+              disabled={updateItem.isPending}
+            />
             <select
               value={item.frequency}
               onChange={(e) => updateItem.mutate({ id: item.id, frequency: e.target.value })}

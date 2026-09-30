@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
 import ProductPicker from '../components/ProductPicker';
-import type { Recipe, Product } from '../types';
+import QtyControl from '../components/QtyControl';
+import type { Recipe, RecipeProduct } from '../types';
 
 export default function RecipesPage() {
   const [editing, setEditing] = useState<Recipe | 'new' | null>(null);
@@ -56,6 +57,7 @@ export default function RecipesPage() {
             <div className="mt-2 flex flex-wrap gap-1.5">
               {r.products.map((p) => (
                 <span key={p.id} className="bg-stone-100 text-xs px-2 py-1 rounded-full">
+                  {p.quantity >= 2 ? `${p.quantity}× ` : ''}
                   {p.name}
                 </span>
               ))}
@@ -71,12 +73,15 @@ export default function RecipesPage() {
 
 function RecipeForm({ recipe, onClose }: { recipe: Recipe | null; onClose: () => void }) {
   const [name, setName] = useState(recipe?.name ?? '');
-  const [products, setProducts] = useState<Product[]>(recipe?.products ?? []);
+  const [products, setProducts] = useState<RecipeProduct[]>(recipe?.products ?? []);
   const queryClient = useQueryClient();
 
   const save = useMutation({
     mutationFn: () => {
-      const body = JSON.stringify({ name, product_ids: products.map((p) => p.id) });
+      const body = JSON.stringify({
+        name,
+        items: products.map((p) => ({ product_id: p.id, quantity: p.quantity })),
+      });
       return recipe
         ? api(`/recipes/${recipe.id}`, { method: 'PUT', body })
         : api('/recipes', { method: 'POST', body });
@@ -86,6 +91,10 @@ function RecipeForm({ recipe, onClose }: { recipe: Recipe | null; onClose: () =>
       onClose();
     },
   });
+
+  function setQty(id: number, quantity: number) {
+    setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, quantity } : p)));
+  }
 
   return (
     <div className="bg-white rounded-xl shadow p-4 space-y-3 border-2 border-emerald-200">
@@ -98,16 +107,19 @@ function RecipeForm({ recipe, onClose }: { recipe: Recipe | null; onClose: () =>
         className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm"
       />
       <ProductPicker
-        onPick={(p) => setProducts((prev) => (prev.some((x) => x.id === p.id) ? prev : [...prev, p]))}
+        onPick={(p) =>
+          setProducts((prev) => (prev.some((x) => x.id === p.id) ? prev : [...prev, { ...p, quantity: 1 }]))
+        }
         excludeIds={products.map((p) => p.id)}
       />
       <div className="flex flex-wrap gap-1.5">
         {products.map((p) => (
           <span
             key={p.id}
-            className="bg-emerald-100 text-emerald-800 text-xs px-2 py-1 rounded-full flex items-center gap-1"
+            className="bg-emerald-100 text-emerald-800 text-xs px-2 py-1 rounded-full flex items-center gap-1.5"
           >
             {p.name}
+            <QtyControl value={p.quantity} onChange={(q) => setQty(p.id, q)} />
             <button onClick={() => setProducts((prev) => prev.filter((x) => x.id !== p.id))}>✕</button>
           </span>
         ))}

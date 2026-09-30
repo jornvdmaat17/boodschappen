@@ -139,6 +139,7 @@ export default function ListViewPage() {
                     className="w-5 h-5 accent-emerald-600"
                   />
                   <span className={`flex-1 text-sm ${item.checked ? 'line-through text-stone-400' : ''}`}>
+                    {item.quantity >= 2 && <b className="text-emerald-700 mr-1">{item.quantity}×</b>}
                     {item.product_name}
                   </span>
                   {!done && (

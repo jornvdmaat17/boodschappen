@@ -6,15 +6,18 @@ import { emitToList } from '../socket.js';
 export const listsRouter = Router();
 
 // Recompute the auto-generated items (recipes on the meal plan + active recurring
-// items) for a weekly list, preserving checked state and manual items.
+// items) for a weekly list, preserving checked state and manual items. Quantities
+// sum up: a recipe planned on two days counts its products twice.
 async function syncAutoItems(client: PoolClient, listId: number) {
   const { rows: autoProducts } = await client.query(
-    `SELECT DISTINCT ri.product_id FROM meal_plan_days mpd
-       JOIN weekly_meal_plans wmp ON wmp.id = mpd.meal_plan_id
-       JOIN recipe_items ri ON ri.recipe_id = mpd.recipe_id
-     WHERE wmp.shopping_list_id = $1
-     UNION
-     SELECT product_id FROM recurring_items WHERE active = TRUE`,
+    `SELECT product_id, SUM(quantity)::int AS quantity FROM (
+       SELECT ri.product_id, ri.quantity FROM meal_plan_days mpd
+         JOIN weekly_meal_plans wmp ON wmp.id = mpd.meal_plan_id
+         JOIN recipe_items ri ON ri.recipe_id = mpd.recipe_id
+       WHERE wmp.shopping_list_id = $1
+       UNION ALL
+       SELECT product_id, quantity FROM recurring_items WHERE active = TRUE
+     ) t GROUP BY product_id`,
     [listId]
   );
   const ids = autoProducts.map((r) => r.product_id);
@@ -23,11 +26,13 @@ async function syncAutoItems(client: PoolClient, listId: number) {
      WHERE shopping_list_id = $1 AND source = 'auto' AND NOT (product_id = ANY($2::int[]))`,
     [listId, ids]
   );
-  for (const pid of ids) {
+  for (const row of autoProducts) {
     await client.query(
-      `INSERT INTO shopping_list_items (shopping_list_id, product_id, source)
-       VALUES ($1, $2, 'auto') ON CONFLICT (shopping_list_id, product_id) DO NOTHING`,
-      [listId, pid]
+      `INSERT INTO shopping_list_items (shopping_list_id, product_id, source, quantity)
+       VALUES ($1, $2, 'auto', $3)
+       ON CONFLICT (shopping_list_id, product_id)
+       DO UPDATE SET quantity = EXCLUDED.quantity WHERE shopping_list_items.source = 'auto'`,
+      [listId, row.product_id, row.quantity]
     );
   }
 }
@@ -90,7 +95,7 @@ listsRouter.get('/:id', async (req, res) => {
   const list = listRows[0];
 
   const { rows: items } = await query(
-    `SELECT sli.id, sli.product_id, sli.checked, sli.source,
+    `SELECT sli.id, sli.product_id, sli.checked, sli.source, sli.quantity,
             p.name AS product_name, c.id AS category_id, c.name AS category_name,
             sco.order_position
      FROM shopping_list_items sli
@@ -155,8 +160,8 @@ listsRouter.post('/:id/recipes', async (req, res) => {
   const { recipe_id } = req.body || {};
   if (!recipe_id) return res.status(400).json({ error: 'recipe_id required' });
   await query(
-    `INSERT INTO shopping_list_items (shopping_list_id, product_id, source)
-     SELECT $1, product_id, 'manual' FROM recipe_items WHERE recipe_id = $2
+    `INSERT INTO shopping_list_items (shopping_list_id, product_id, source, quantity)
+     SELECT $1, product_id, 'manual', quantity FROM recipe_items WHERE recipe_id = $2
      ON CONFLICT (shopping_list_id, product_id) DO NOTHING`,
     [req.params.id, recipe_id]
   );

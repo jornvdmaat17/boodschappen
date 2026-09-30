@@ -21,10 +21,14 @@ export interface StoreCategory {
   name: string;
 }
 
+export interface RecipeProduct extends Product {
+  quantity: number;
+}
+
 export interface Recipe {
   id: number;
   name: string;
-  products: Product[];
+  products: RecipeProduct[];
 }
 
 export interface RecurringItem {
@@ -32,6 +36,7 @@ export interface RecurringItem {
   product_id: number;
   product_name: string;
   frequency: string;
+  quantity: number;
   active: boolean;
 }
 
@@ -51,6 +56,7 @@ export interface ListItem {
   product_id: number;
   product_name: string;
   checked: boolean;
+  quantity: number;
   source: 'manual' | 'auto';
   category_id: number | null;
   category_name: string | null;

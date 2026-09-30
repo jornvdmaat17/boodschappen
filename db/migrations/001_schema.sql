@@ -43,6 +43,7 @@ CREATE TABLE recipe_items (
   id SERIAL PRIMARY KEY,
   recipe_id INT NOT NULL REFERENCES recipes(id) ON DELETE CASCADE,
   product_id INT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  quantity INT NOT NULL DEFAULT 1 CHECK (quantity >= 1),
   UNIQUE(recipe_id, product_id)
 );
 
@@ -50,6 +51,7 @@ CREATE TABLE recurring_items (
   id SERIAL PRIMARY KEY,
   product_id INT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
   frequency VARCHAR(50) NOT NULL DEFAULT 'weekly',
+  quantity INT NOT NULL DEFAULT 1 CHECK (quantity >= 1),
   active BOOLEAN DEFAULT TRUE,
   created_at TIMESTAMP DEFAULT NOW(),
   UNIQUE(product_id)
@@ -83,6 +85,7 @@ CREATE TABLE shopping_list_items (
   product_id INT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
   checked BOOLEAN DEFAULT FALSE,
   source VARCHAR(10) NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'auto')),
+  quantity INT NOT NULL DEFAULT 1 CHECK (quantity >= 1),
   created_at TIMESTAMP DEFAULT NOW(),
   UNIQUE(shopping_list_id, product_id)
 );
