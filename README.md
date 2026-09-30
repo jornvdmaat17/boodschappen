@@ -41,14 +41,36 @@ cd frontend && npm install && npm run dev
 4. **Recepten** → maak recepten van producten.
 5. **Weeklijst** → kies per dag een recept, genereer de lijst. Vaste items komen er automatisch bij.
 
-## Deployment (AWS EC2 + Cloudflare)
+## Deployment (AWS EC2 + Cloudflare Tunnel)
 
-1. **EC2:** Ubuntu 22.04, t3.micro/small. Security group: poort 22 (SSH) en 80 (of 8080) open.
+Met een Cloudflare Tunnel hoeft er **geen enkele inkomende poort** open op de EC2
+(alleen 22 voor SSH). De tunnel-container maakt een uitgaande verbinding naar
+Cloudflare en stuurt verkeer intern door naar de frontend.
+
+1. **EC2:** Ubuntu 22.04, t3.micro/small. Security group: alleen poort 22 (SSH) open.
 2. Installeer Docker: `sudo apt update && sudo apt install -y docker.io docker-compose-v2`
-3. Clone de repo, maak `.env` aan met sterke wachtwoorden en zet `CORS_ORIGIN` op je domein.
-4. `docker compose up -d --build`
-5. **Cloudflare:** A-record naar het EC2 IP, proxy aan (oranje wolkje), SSL-modus "Flexible" (of zet zelf een certificaat op de EC2 en gebruik "Full").
-6. Poort 8085 → wil je poort 80, wijzig in `docker-compose.yml` bij frontend `"80:80"`.
+3. Clone de repo en maak `.env` aan met sterke wachtwoorden.
+4. **Maak de tunnel aan** in het Cloudflare-dashboard:
+   - [one.dash.cloudflare.com](https://one.dash.cloudflare.com) → **Networks → Tunnels → Create a tunnel**
+   - Kies **Cloudflared**, geef een naam (bijv. `boodschappen`)
+   - Kopieer het **token** (de lange string achter `--token` in het install-commando)
+5. Zet in `.env`:
+   ```env
+   TUNNEL_TOKEN=<het token uit stap 4>
+   CORS_ORIGIN=https://boodschappen.jouwdomein.nl
+   ```
+6. **Public hostname** instellen (zelfde tunnel-pagina, tab *Public Hostname*):
+   - Subdomain: `boodschappen`, Domain: `jouwdomein.nl`
+   - Service: **HTTP** → `frontend:80` (cloudflared zit in hetzelfde Docker-netwerk)
+7. Start alles inclusief tunnel:
+   ```bash
+   docker compose --profile tunnel up -d --build
+   ```
+8. Klaar — de app draait op `https://boodschappen.jouwdomein.nl` met automatisch SSL.
+   WebSockets (live sync) werken standaard door de tunnel heen.
+
+> Zonder `--profile tunnel` start de stack lokaal zoals altijd, zonder tunnel.
+> De poortmapping `8085:80` mag in productie weg (de tunnel gebruikt hem niet).
 
 ### Backups
 

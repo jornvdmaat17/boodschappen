@@ -47,6 +47,21 @@ services:
       - app-network
     restart: unless-stopped
 
+  # Cloudflare Tunnel — only starts with: docker compose --profile tunnel up -d
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: boodschappen-tunnel
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN}
+    depends_on:
+      - frontend
+    networks:
+      - app-network
+    restart: unless-stopped
+    profiles:
+      - tunnel
+
 volumes:
   postgres_data:
 
