@@ -6,6 +6,7 @@ const navItems = [
   { to: '/', label: 'Lijsten' },
   { to: '/recipes', label: 'Recepten' },
   { to: '/products', label: 'Producten' },
+  { to: '/categories', label: 'Categorieën' },
   { to: '/stores', label: 'Winkels' },
   { to: '/recurring', label: 'Vaste items' },
 ];

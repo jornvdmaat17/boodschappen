@@ -7,7 +7,6 @@ export default function ProductsPage() {
   const [search, setSearch] = useState('');
   const [newName, setNewName] = useState('');
   const [newCategoryId, setNewCategoryId] = useState<number | ''>('');
-  const [newCatName, setNewCatName] = useState('');
   const queryClient = useQueryClient();
 
   const { data: products = [] } = useQuery<Product[]>({ queryKey: ['products'], queryFn: () => api('/products') });
@@ -37,14 +36,6 @@ export default function ProductsPage() {
   const deleteProduct = useMutation({
     mutationFn: (id: number) => api(`/products/${id}`, { method: 'DELETE' }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['products'] }),
-  });
-
-  const createCategory = useMutation({
-    mutationFn: () => api('/categories', { method: 'POST', body: JSON.stringify({ name: newCatName }) }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['categories'] });
-      setNewCatName('');
-    },
   });
 
   const term = search.trim().toLowerCase();
@@ -82,22 +73,6 @@ export default function ProductsPage() {
             className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-emerald-700 disabled:opacity-40"
           >
             +
-          </button>
-        </div>
-        <div className="flex gap-2 items-center pt-1">
-          <input
-            type="text"
-            value={newCatName}
-            onChange={(e) => setNewCatName(e.target.value)}
-            placeholder="Nieuwe categorie..."
-            className="flex-1 border border-stone-200 rounded-lg px-3 py-1.5 text-xs"
-          />
-          <button
-            onClick={() => createCategory.mutate()}
-            disabled={!newCatName.trim() || createCategory.isPending}
-            className="text-xs text-emerald-700 font-medium disabled:opacity-40"
-          >
-            + categorie
           </button>
         </div>
       </div>

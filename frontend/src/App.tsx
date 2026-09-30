@@ -7,6 +7,7 @@ import ListViewPage from './pages/ListView';
 import WeeklyCreatePage from './pages/WeeklyCreate';
 import RecipesPage from './pages/Recipes';
 import ProductsPage from './pages/Products';
+import CategoriesPage from './pages/Categories';
 import StoresPage from './pages/Stores';
 import RecurringPage from './pages/Recurring';
 
@@ -33,6 +34,7 @@ export default function App() {
         <Route path="weekly/new" element={<WeeklyCreatePage />} />
         <Route path="recipes" element={<RecipesPage />} />
         <Route path="products" element={<ProductsPage />} />
+        <Route path="categories" element={<CategoriesPage />} />
         <Route path="stores" element={<StoresPage />} />
         <Route path="recurring" element={<RecurringPage />} />
       </Route>
