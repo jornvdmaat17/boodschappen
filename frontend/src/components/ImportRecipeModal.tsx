@@ -36,7 +36,10 @@ function suggestProduct(line: string, products: Product[]): Product | null {
 }
 
 export default function ImportRecipeModal({ onClose }: { onClose: () => void }) {
+  const [mode, setMode] = useState<'url' | 'text'>('url');
   const [url, setUrl] = useState('');
+  const [pastedText, setPastedText] = useState('');
+  const [textUrl, setTextUrl] = useState('');
   const [name, setName] = useState('');
   const [sourceUrl, setSourceUrl] = useState('');
   const [rows, setRows] = useState<Row[] | null>(null);
@@ -71,6 +74,26 @@ export default function ImportRecipeModal({ onClose }: { onClose: () => void }) 
     },
     onError: (e: Error) => setError(e.message),
   });
+
+  async function processText() {
+    const prods = await queryClient.fetchQuery<Product[]>({
+      queryKey: ['products'],
+      queryFn: () => api('/products'),
+    });
+    const lines = pastedText
+      .split('\n')
+      .map((l) => l.replace(/^[-•*·]\s*/, '').trim())
+      .filter((l) => l.length > 0 && l.length <= 100)
+      .slice(0, 60);
+    setError('');
+    setSourceUrl(textUrl.trim());
+    setRows(
+      lines.map((text) => {
+        const product = suggestProduct(text, prods);
+        return { text, product, include: product !== null };
+      })
+    );
+  }
 
   const save = useMutation({
     mutationFn: () => {
@@ -107,27 +130,80 @@ export default function ImportRecipeModal({ onClose }: { onClose: () => void }) 
 
         {!rows && (
           <>
-            <p className="text-sm text-stone-500">
-              Plak een link van bijvoorbeeld jumbo.com/recepten. (ah.nl blokkeert helaas automatisch
-              ophalen.)
-            </p>
-            <div className="flex gap-2">
-              <input
-                type="url"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://www.jumbo.com/recepten/..."
-                autoFocus
-                className="flex-1 min-w-0 border border-stone-300 rounded-lg px-3 py-2 text-sm"
-              />
-              <button
-                onClick={() => fetchRecipe.mutate()}
-                disabled={!url.trim() || fetchRecipe.isPending}
-                className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-emerald-700 disabled:opacity-40"
-              >
-                {fetchRecipe.isPending ? 'Bezig...' : 'Ophalen'}
-              </button>
+            <div className="flex gap-1 bg-stone-100 rounded-lg p-1">
+              {(
+                [
+                  ['url', 'Van URL'],
+                  ['text', 'Plak tekst'],
+                ] as const
+              ).map(([m, label]) => (
+                <button
+                  key={m}
+                  onClick={() => setMode(m)}
+                  className={`flex-1 text-sm py-1.5 rounded-md ${
+                    mode === m ? 'bg-white shadow font-medium' : 'text-stone-500'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
+
+            {mode === 'url' && (
+              <>
+                <p className="text-sm text-stone-500">
+                  Plak een link van bijvoorbeeld jumbo.com/recepten. (ah.nl en Instagram blokkeren
+                  automatisch ophalen — gebruik daarvoor "Plak tekst".)
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
+                    placeholder="https://www.jumbo.com/recepten/..."
+                    autoFocus
+                    className="flex-1 min-w-0 border border-stone-300 rounded-lg px-3 py-2 text-sm"
+                  />
+                  <button
+                    onClick={() => fetchRecipe.mutate()}
+                    disabled={!url.trim() || fetchRecipe.isPending}
+                    className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-emerald-700 disabled:opacity-40"
+                  >
+                    {fetchRecipe.isPending ? 'Bezig...' : 'Ophalen'}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {mode === 'text' && (
+              <>
+                <p className="text-sm text-stone-500">
+                  Kopieer de caption of ingrediëntenlijst (bijv. uit de Instagram-app) en plak die hier.
+                </p>
+                <textarea
+                  value={pastedText}
+                  onChange={(e) => setPastedText(e.target.value)}
+                  placeholder={'2 rode uien\n400 g gehakt\n1 blik tomatenblokjes\n...'}
+                  rows={7}
+                  autoFocus
+                  className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm"
+                />
+                <input
+                  type="url"
+                  value={textUrl}
+                  onChange={(e) => setTextUrl(e.target.value)}
+                  placeholder="Link naar de post (optioneel, bijv. Instagram)"
+                  className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm"
+                />
+                <button
+                  onClick={processText}
+                  disabled={!pastedText.trim()}
+                  className="w-full bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-emerald-700 disabled:opacity-40"
+                >
+                  Verwerken
+                </button>
+              </>
+            )}
           </>
         )}
 
@@ -137,6 +213,7 @@ export default function ImportRecipeModal({ onClose }: { onClose: () => void }) 
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
+              placeholder="Naam van het recept"
               className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm font-medium"
             />
             <p className="text-sm text-stone-500">
