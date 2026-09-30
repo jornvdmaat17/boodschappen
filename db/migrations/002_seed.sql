@@ -34,3 +34,60 @@ CROSS JOIN (SELECT id FROM categories WHERE name = 'groenten & fruit') AS c
 WHERE NOT EXISTS (
   SELECT 1 FROM products p WHERE LOWER(p.name) = v.name
 );
+
+INSERT INTO products (name, category_id)
+SELECT v.name, c.id
+FROM (VALUES
+  ('eieren', 'zuivel'),
+  ('kookroom', 'zuivel'),
+  ('griekse yoghurt', 'zuivel'),
+  ('drinkyoghurt', 'zuivel'),
+  ('margarine', 'zuivel'),
+  ('slagroom', 'zuivel'),
+  ('cottage cheese', 'zuivel'),
+  ('kwark', 'zuivel'),
+  ('geitenkaas', 'kaas'),
+  ('gouda plakken', 'kaas'),
+  ('feta', 'kaas'),
+  ('kipfilet', 'vlees & vis'),
+  ('gerookte kipfilet', 'vlees & vis'),
+  ('kipschnitzel', 'vlees & vis'),
+  ('cervelaat', 'vlees & vis'),
+  ('achterham', 'vlees & vis'),
+  ('slavinken', 'vlees & vis'),
+  ('gehakt', 'vlees & vis'),
+  ('tomatenblokjes', 'conserven'),
+  ('gezeefde tomaten', 'conserven'),
+  ('kokosmelk', 'conserven'),
+  ('kidneybonen', 'conserven'),
+  ('kikkererwten', 'conserven'),
+  ('chilibonen', 'conserven'),
+  ('zwarte bonen', 'conserven'),
+  ('kurkuma', 'sauzen & kruiden'),
+  ('komijn', 'sauzen & kruiden'),
+  ('kruidenmix', 'sauzen & kruiden'),
+  ('currykruiden', 'sauzen & kruiden'),
+  ('olijfolie', 'sauzen & kruiden'),
+  ('pesto', 'sauzen & kruiden'),
+  ('citroensap', 'sauzen & kruiden'),
+  ('penne', 'pasta & rijst'),
+  ('risottorijst', 'pasta & rijst'),
+  ('couscous', 'pasta & rijst'),
+  ('tortellini', 'pasta & rijst'),
+  ('mineraalwater', 'dranken'),
+  ('koffiecups', 'dranken'),
+  ('bier', 'dranken'),
+  ('frisdrank', 'dranken'),
+  ('siroop', 'dranken'),
+  ('suikerwafels', 'snacks'),
+  ('koekjes', 'snacks'),
+  ('chocolade', 'snacks'),
+  ('knäckebröd', 'brood'),
+  ('jam', 'ontbijt'),
+  ('ontbijtkoek', 'ontbijt'),
+  ('winterpeen', 'groenten & fruit')
+) AS v(name, cat)
+JOIN categories c ON c.name = v.cat
+WHERE NOT EXISTS (
+  SELECT 1 FROM products p WHERE LOWER(p.name) = v.name
+);
