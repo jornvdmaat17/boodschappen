@@ -49,27 +49,29 @@ function findRecipeNode(html: string): any | null {
   return null;
 }
 
-// Generates a recipe with Cloudflare Workers AI, steered towards the household's
-// existing product names so the ingredient matching lands automatically.
-recipesRouter.post('/generate', async (req, res) => {
-  const { prompt } = req.body || {};
-  if (!prompt?.trim()) return res.status(400).json({ error: 'prompt required' });
-  if (!config.cfAccountId || !config.cfAiToken) {
-    return res.status(422).json({
-      error:
-        'AI is niet geconfigureerd. Zet CLOUDFLARE_ACCOUNT_ID en CLOUDFLARE_AI_TOKEN in .env en herstart.',
-    });
+class AiError extends Error {
+  constructor(message: string, public status: number) {
+    super(message);
   }
+}
 
-  const { rows: products } = await query('SELECT name FROM products ORDER BY name');
-  const productNames = products.map((r) => r.name).join(', ');
-
-  const system = `Je bent een Nederlandse thuiskok. Bedenk één avondmaaltijd-recept dat past bij de wens van de gebruiker (voor 2 personen).
-Antwoord UITSLUITEND met geldige JSON, zonder uitleg of markdown, in dit formaat:
+const JSON_FORMAT_RULES = `Antwoord UITSLUITEND met geldige JSON, zonder uitleg of markdown, in dit formaat:
 {"name": "korte naam van het gerecht", "ingredients": ["ingrediënt", "ingrediënt", ...]}
-Regels voor ingredients: korte generieke Nederlandse namen zonder hoeveelheden (dus "rode ui", niet "2 rode uien").
-Gebruik waar mogelijk exact deze bestaande productnamen: ${productNames}`;
+Regels voor ingredients: korte generieke Nederlandse namen zonder hoeveelheden (dus "rode ui", niet "2 rode uien").`;
 
+async function productNameList(): Promise<string> {
+  const { rows } = await query('SELECT name FROM products ORDER BY name');
+  return rows.map((r) => r.name).join(', ');
+}
+
+// Calls Cloudflare Workers AI and returns the {name, ingredients} JSON it produced.
+async function askWorkersAi(system: string, user: string): Promise<{ name: string; ingredients: string[] }> {
+  if (!config.cfAccountId || !config.cfAiToken) {
+    throw new AiError(
+      'AI is niet geconfigureerd. Zet CLOUDFLARE_ACCOUNT_ID en CLOUDFLARE_AI_TOKEN in .env en herstart.',
+      422
+    );
+  }
   let aiResponse: Response;
   try {
     aiResponse = await fetch(
@@ -83,7 +85,7 @@ Gebruik waar mogelijk exact deze bestaande productnamen: ${productNames}`;
         body: JSON.stringify({
           messages: [
             { role: 'system', content: system },
-            { role: 'user', content: String(prompt).slice(0, 500) },
+            { role: 'user', content: user },
           ],
           max_tokens: 512,
         }),
@@ -91,13 +93,13 @@ Gebruik waar mogelijk exact deze bestaande productnamen: ${productNames}`;
       }
     );
   } catch {
-    return res.status(502).json({ error: 'Kon Cloudflare AI niet bereiken' });
+    throw new AiError('Kon Cloudflare AI niet bereiken', 502);
   }
 
   const data: any = await aiResponse.json().catch(() => null);
   if (!aiResponse.ok || !data?.success) {
     const detail = data?.errors?.[0]?.message || `status ${aiResponse.status}`;
-    return res.status(422).json({ error: `Cloudflare AI fout: ${detail}` });
+    throw new AiError(`Cloudflare AI fout: ${detail}`, 422);
   }
 
   // Depending on the model, `response` is either a string or an already-parsed object.
@@ -114,12 +116,45 @@ Gebruik waar mogelijk exact deze bestaande productnamen: ${productNames}`;
     }
   }
   if (!parsed?.name || !Array.isArray(parsed.ingredients)) {
-    return res.status(422).json({ error: 'AI gaf geen bruikbaar recept terug, probeer opnieuw' });
+    throw new AiError('AI gaf geen bruikbaar recept terug, probeer opnieuw', 422);
   }
-  res.json({
+  return {
     name: String(parsed.name).slice(0, 200),
     ingredients: parsed.ingredients.map((s: unknown) => String(s).trim()).filter(Boolean).slice(0, 30),
-  });
+  };
+}
+
+// Generates a recipe with Cloudflare Workers AI, steered towards the household's
+// existing product names so the ingredient matching lands automatically.
+recipesRouter.post('/generate', async (req, res) => {
+  const { prompt } = req.body || {};
+  if (!prompt?.trim()) return res.status(400).json({ error: 'prompt required' });
+  const system = `Je bent een Nederlandse thuiskok. Bedenk één avondmaaltijd-recept dat past bij de wens van de gebruiker (voor 2 personen).
+${JSON_FORMAT_RULES}
+Gebruik waar mogelijk exact deze bestaande productnamen: ${await productNameList()}`;
+  try {
+    res.json(await askWorkersAi(system, String(prompt).slice(0, 500)));
+  } catch (err) {
+    if (err instanceof AiError) return res.status(err.status).json({ error: err.message });
+    throw err;
+  }
+});
+
+// Extracts a recipe from pasted free text (e.g. an Instagram caption) with Workers AI.
+recipesRouter.post('/parse-text', async (req, res) => {
+  const { text } = req.body || {};
+  if (!text?.trim()) return res.status(400).json({ error: 'text required' });
+  const system = `Je krijgt vrije tekst (bijvoorbeeld een Instagram-caption) waarin een recept staat, in willekeurige taal.
+Haal de naam van het gerecht en de ingrediënten eruit. Vertaal ingrediënten naar het Nederlands.
+Negeer hoeveelheden, kookinstructies, hashtags en promopraat. Water, peper en zout zijn geen ingrediënten.
+${JSON_FORMAT_RULES}
+Gebruik waar mogelijk exact deze bestaande productnamen: ${await productNameList()}`;
+  try {
+    res.json(await askWorkersAi(system, String(text).slice(0, 4000)));
+  } catch (err) {
+    if (err instanceof AiError) return res.status(err.status).json({ error: err.message });
+    throw err;
+  }
 });
 
 // Fetches a recipe page and extracts name + ingredients from its schema.org data.

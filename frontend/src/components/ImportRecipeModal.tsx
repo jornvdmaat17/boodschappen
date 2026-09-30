@@ -148,33 +148,48 @@ export default function ImportRecipeModal({ onClose }: { onClose: () => void }) 
     onError: (e: Error) => setError(e.message),
   });
 
-  async function processText() {
-    const prods = await queryClient.fetchQuery<Product[]>({
-      queryKey: ['products'],
-      queryFn: () => api('/products'),
-    });
-    // Split on newlines, then break prose lines apart on commas and "and"/"en",
-    // so "pasta, garlic and zucchini" becomes separate rows.
-    const lines = pastedText
-      .split('\n')
-      .flatMap((l) => l.split(/,|\ben\b|\band\b|&/i))
-      .map((l) =>
-        l
-          .replace(/^[-•*·]\s*/, '')
-          .replace(/[.!?:;]+$/, '')
-          .trim()
-      )
-      .filter((l) => l.length > 1 && l.length <= 100)
-      .slice(0, 60);
-    setError('');
-    setSourceUrl(textUrl.trim());
-    setRows(
-      lines.map((text) => {
-        const product = suggestProduct(text, prods);
-        return { text, product, include: product !== null };
-      })
-    );
-  }
+  // Try AI extraction first; fall back to the local line splitter when AI is
+  // unconfigured or fails.
+  const processText = useMutation({
+    mutationFn: async () => {
+      const prods = await queryClient.fetchQuery<Product[]>({
+        queryKey: ['products'],
+        queryFn: () => api('/products'),
+      });
+      try {
+        const parsed = await api<{ name: string; ingredients: string[] }>('/recipes/parse-text', {
+          method: 'POST',
+          body: JSON.stringify({ text: pastedText }),
+        });
+        return { prods, name: parsed.name, lines: parsed.ingredients };
+      } catch {
+        const lines = pastedText
+          .split('\n')
+          .flatMap((l) => l.split(/,|\ben\b|\band\b|&/i))
+          .map((l) =>
+            l
+              .replace(/^[-•*·]\s*/, '')
+              .replace(/[.!?:;]+$/, '')
+              .trim()
+          )
+          .filter((l) => l.length > 1 && l.length <= 100)
+          .slice(0, 60);
+        return { prods, name: '', lines };
+      }
+    },
+    onSuccess: ({ prods, name: parsedName, lines }) => {
+      setError('');
+      setSourceUrl(textUrl.trim());
+      if (parsedName) setName(parsedName);
+      setRows(
+        lines.map((text) => {
+          const product = suggestProduct(text, prods);
+          return { text, product, include: product !== null };
+        })
+      );
+    },
+    onError: (e: Error) => setError(e.message),
+  });
 
   const save = useMutation({
     mutationFn: () => {
@@ -301,11 +316,11 @@ export default function ImportRecipeModal({ onClose }: { onClose: () => void }) 
                   className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm"
                 />
                 <button
-                  onClick={processText}
-                  disabled={!pastedText.trim()}
+                  onClick={() => processText.mutate()}
+                  disabled={!pastedText.trim() || processText.isPending}
                   className="w-full bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-emerald-700 disabled:opacity-40"
                 >
-                  Verwerken
+                  {processText.isPending ? 'Bezig...' : 'Verwerken'}
                 </button>
               </>
             )}
