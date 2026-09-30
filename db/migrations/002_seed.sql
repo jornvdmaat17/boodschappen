@@ -3,7 +3,7 @@ INSERT INTO categories (name) VALUES
   ('brood'),
   ('vlees & vis'),
   ('zuivel'),
-  ('vleeswaren/broodsalades')
+  ('vleeswaren/broodsalades'),
   ('kaas'),
   ('pasta & rijst'),
   ('conserven'),
