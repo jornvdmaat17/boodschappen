@@ -228,20 +228,24 @@ export default function ListViewPage() {
             {!isCollapsed && (
             <div className="divide-y divide-stone-100">
               {group.items.map((item) => (
-                <div key={item.id} className="px-4 py-2.5 flex items-center gap-3">
-                  <input
-                    type="checkbox"
-                    checked={item.checked}
-                    disabled={done}
-                    onChange={(e) => toggleItem.mutate({ productId: item.product_id, checked: e.target.checked })}
-                    className="w-5 h-5 accent-emerald-600"
-                  />
-                  <span className={`flex-1 min-w-0 text-sm ${item.checked ? 'line-through text-stone-400' : ''}`}>
-                    {(done || item.checked) && item.quantity >= 2 && (
-                      <b className="text-emerald-700 mr-1">{item.quantity}×</b>
-                    )}
-                    {item.product_name}
-                  </span>
+                <div key={item.id} className="px-4 flex items-center gap-3">
+                  <label
+                    className={`flex-1 min-w-0 py-2.5 flex items-center gap-3 select-none ${done ? '' : 'cursor-pointer'}`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={item.checked}
+                      disabled={done}
+                      onChange={(e) => toggleItem.mutate({ productId: item.product_id, checked: e.target.checked })}
+                      className="w-5 h-5 shrink-0 accent-emerald-600"
+                    />
+                    <span className={`flex-1 min-w-0 text-sm ${item.checked ? 'line-through text-stone-400' : ''}`}>
+                      {(done || item.checked) && item.quantity >= 2 && (
+                        <b className="text-emerald-700 mr-1">{item.quantity}×</b>
+                      )}
+                      {item.product_name}
+                    </span>
+                  </label>
                   {!done && !item.checked && (
                     <QtyControl
                       value={item.quantity}

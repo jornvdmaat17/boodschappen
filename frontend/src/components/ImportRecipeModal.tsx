@@ -15,6 +15,7 @@ interface Row {
   text: string;
   product: Product | null;
   include: boolean;
+  optional: boolean;
 }
 
 function escapeRegExp(s: string) {
@@ -132,7 +133,7 @@ export default function ImportRecipeModal({ onClose, onCreated, initialMode, avo
       setRows(
         imported.ingredients.map((text) => {
           const product = suggestProduct(text, prods);
-          return { text, product, include: product !== null };
+          return { text, product, include: product !== null, optional: false };
         })
       );
     },
@@ -159,7 +160,7 @@ export default function ImportRecipeModal({ onClose, onCreated, initialMode, avo
       setRows(
         generated.ingredients.map((text) => {
           const product = suggestProduct(text, prods);
-          return { text, product, include: product !== null };
+          return { text, product, include: product !== null, optional: false };
         })
       );
     },
@@ -204,7 +205,7 @@ export default function ImportRecipeModal({ onClose, onCreated, initialMode, avo
       setRows(
         lines.map((text) => {
           const product = suggestProduct(text, prods);
-          return { text, product, include: product !== null };
+          return { text, product, include: product !== null, optional: false };
         })
       );
     },
@@ -214,10 +215,15 @@ export default function ImportRecipeModal({ onClose, onCreated, initialMode, avo
   const save = useMutation({
     mutationFn: () => {
       const chosen = rows!.filter((r) => r.include && r.product);
-      const seen = new Set<number>();
-      const items = chosen
-        .filter((r) => (seen.has(r.product!.id) ? false : (seen.add(r.product!.id), true)))
-        .map((r) => ({ product_id: r.product!.id, quantity: 1 }));
+      // Rows linked to the same product collapse into one item, which is only
+      // "soms" when every one of those rows is.
+      const byProduct = new Map<number, { product_id: number; quantity: number; optional: boolean }>();
+      for (const r of chosen) {
+        const prev = byProduct.get(r.product!.id);
+        if (prev) prev.optional &&= r.optional;
+        else byProduct.set(r.product!.id, { product_id: r.product!.id, quantity: 1, optional: r.optional });
+      }
+      const items = [...byProduct.values()];
       return api<{ id: number; name: string }>('/recipes', {
         method: 'POST',
         body: JSON.stringify({ name, source_url: sourceUrl, description, items }),
@@ -373,7 +379,7 @@ export default function ImportRecipeModal({ onClose, onCreated, initialMode, avo
             />
             <p className="text-sm text-stone-500">
               Vink aan wat je wilt toevoegen en koppel een product. Regels zonder vinkje (zoals kruiden
-              die je al hebt) worden overgeslagen.
+              die je al hebt) worden overgeslagen. Zet "soms" aan voor wat je niet altijd hoeft te kopen.
             </p>
             <div className="space-y-1.5">
               {rows.map((row, i) => (
@@ -388,9 +394,22 @@ export default function ImportRecipeModal({ onClose, onCreated, initialMode, avo
                     />
                     <span className="flex-1 min-w-0 text-xs text-stone-500 break-words">{row.text}</span>
                     {row.product ? (
-                      <span className="bg-emerald-100 text-emerald-800 text-xs px-2 py-1 rounded-full flex items-center gap-1 shrink-0">
+                      <span
+                        className={`text-xs px-2 py-1 rounded-full flex items-center gap-1.5 shrink-0 ${
+                          row.optional ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
+                        }`}
+                      >
                         {row.product.name}
-                        <button onClick={() => updateRow(i, { product: null, include: false })}>✕</button>
+                        <button
+                          onClick={() => updateRow(i, { optional: !row.optional })}
+                          title="Soms nodig: bij het toevoegen aan een lijst wordt gevraagd of je dit nodig hebt"
+                          className={`rounded-full px-1.5 font-semibold ${
+                            row.optional ? 'bg-amber-200' : 'bg-white/70 text-stone-500'
+                          }`}
+                        >
+                          soms
+                        </button>
+                        <button onClick={() => updateRow(i, { product: null, include: false, optional: false })}>✕</button>
                       </span>
                     ) : (
                       <button

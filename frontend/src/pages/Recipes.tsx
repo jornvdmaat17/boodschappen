@@ -11,6 +11,12 @@ export default function RecipesPage() {
   const [importing, setImporting] = useState(false);
   const queryClient = useQueryClient();
 
+  function startEditing(recipe: Recipe | 'new') {
+    setEditing(recipe);
+    // The form renders at the top of the page, so bring it into view.
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
   const { data: recipes = [] } = useQuery<Recipe[]>({ queryKey: ['recipes'], queryFn: () => api('/recipes') });
 
   const deleteRecipe = useMutation({
@@ -30,7 +36,7 @@ export default function RecipesPage() {
             🔗 Importeer
           </button>
           <button
-            onClick={() => setEditing('new')}
+            onClick={() => startEditing('new')}
             className="bg-emerald-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-emerald-700"
           >
             + Nieuw recept
@@ -42,6 +48,8 @@ export default function RecipesPage() {
 
       {editing && (
         <RecipeForm
+          // Remount when switching recipes so the form doesn't keep the previous one's fields.
+          key={editing === 'new' ? 'new' : editing.id}
           recipe={editing === 'new' ? null : editing}
           onClose={() => setEditing(null)}
         />
@@ -65,7 +73,7 @@ export default function RecipesPage() {
                 )}
               </h2>
               <div className="flex gap-3 text-sm">
-                <button onClick={() => setEditing(r)} className="text-emerald-700">
+                <button onClick={() => startEditing(r)} className="text-emerald-700">
                   Bewerken
                 </button>
                 <button
