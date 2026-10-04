@@ -3,10 +3,11 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { DAY_NAMES, formatDate, specialLabel } from '../types';
-import type { ShoppingListSummary, Store, TodayMenu } from '../types';
+import type { Recipe, ShoppingListSummary, Store, TodayMenu } from '../types';
 
 export default function DashboardPage() {
   const [pickingStore, setPickingStore] = useState(false);
+  const [showingRecipe, setShowingRecipe] = useState(false);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -43,7 +44,12 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6">
       {todayMenu && (
-        <div className="bg-gradient-to-r from-emerald-600 to-emerald-500 text-white rounded-2xl shadow p-4">
+        <div
+          onClick={todayMenu.recipe_id ? () => setShowingRecipe(true) : undefined}
+          className={`bg-gradient-to-r from-emerald-600 to-emerald-500 text-white rounded-2xl shadow p-4 ${
+            todayMenu.recipe_id ? 'cursor-pointer hover:from-emerald-700 hover:to-emerald-600' : ''
+          }`}
+        >
           <p className="text-xs uppercase tracking-wide text-emerald-100">
             Vanavond · {DAY_NAMES[new Date().getDay()]}
           </p>
@@ -54,6 +60,9 @@ export default function DashboardPage() {
             <p className="text-sm text-emerald-50 mt-1 line-clamp-2">{todayMenu.description}</p>
           )}
         </div>
+      )}
+      {showingRecipe && todayMenu?.recipe_id && (
+        <RecipeModal recipeId={todayMenu.recipe_id} onClose={() => setShowingRecipe(false)} />
       )}
       <div className="grid grid-cols-2 gap-3">
         <Link
@@ -153,6 +162,64 @@ export default function DashboardPage() {
           </div>
         </section>
       )}
+    </div>
+  );
+}
+
+function RecipeModal({ recipeId, onClose }: { recipeId: number; onClose: () => void }) {
+  const { data: recipes, isLoading } = useQuery<Recipe[]>({ queryKey: ['recipes'], queryFn: () => api('/recipes') });
+  const recipe = recipes?.find((r) => r.id === recipeId);
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-30" onClick={onClose}>
+      <div
+        className="bg-white rounded-2xl shadow-lg p-5 w-full max-w-lg space-y-3 max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {isLoading && <p className="text-sm text-stone-500">Laden...</p>}
+        {!isLoading && !recipe && <p className="text-sm text-stone-500">Recept niet gevonden.</p>}
+        {recipe && (
+          <>
+            <h2 className="font-bold text-lg">🍽️ {recipe.name}</h2>
+            {recipe.source_url && (
+              <a
+                href={recipe.source_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-block text-sm text-emerald-700 underline decoration-dotted"
+              >
+                Bekijk het originele recept ↗
+              </a>
+            )}
+            {recipe.description && (
+              <p className="text-sm text-stone-600 whitespace-pre-line">{recipe.description}</p>
+            )}
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-stone-500 mb-1.5">Ingrediënten</h3>
+              <div className="flex flex-wrap gap-1.5">
+                {recipe.products.map((p) => (
+                  <span
+                    key={p.id}
+                    className={`text-xs px-2 py-1 rounded-full ${
+                      p.optional ? 'bg-amber-50 text-amber-700' : 'bg-stone-100'
+                    }`}
+                  >
+                    {p.quantity >= 2 ? `${p.quantity}× ` : ''}
+                    {p.name}
+                    {p.optional ? ' (soms)' : ''}
+                  </span>
+                ))}
+                {recipe.products.length === 0 && <span className="text-xs text-stone-400">Geen producten</span>}
+              </div>
+            </div>
+          </>
+        )}
+        <div className="flex justify-end pt-1">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-stone-600">
+            Sluiten
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

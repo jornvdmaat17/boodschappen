@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
 import ProductPicker from '../components/ProductPicker';
@@ -10,12 +10,6 @@ export default function RecipesPage() {
   const [editing, setEditing] = useState<Recipe | 'new' | null>(null);
   const [importing, setImporting] = useState(false);
   const queryClient = useQueryClient();
-
-  function startEditing(recipe: Recipe | 'new') {
-    setEditing(recipe);
-    // The form renders at the top of the page, so bring it into view.
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
 
   const { data: recipes = [] } = useQuery<Recipe[]>({ queryKey: ['recipes'], queryFn: () => api('/recipes') });
 
@@ -36,7 +30,7 @@ export default function RecipesPage() {
             🔗 Importeer
           </button>
           <button
-            onClick={() => startEditing('new')}
+            onClick={() => setEditing('new')}
             className="bg-emerald-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-emerald-700"
           >
             + Nieuw recept
@@ -73,7 +67,7 @@ export default function RecipesPage() {
                 )}
               </h2>
               <div className="flex gap-3 text-sm">
-                <button onClick={() => startEditing(r)} className="text-emerald-700">
+                <button onClick={() => setEditing(r)} className="text-emerald-700">
                   Bewerken
                 </button>
                 <button
@@ -131,6 +125,12 @@ function RecipeForm({ recipe, onClose }: { recipe: Recipe | null; onClose: () =>
   const [description, setDescription] = useState(recipe?.description ?? '');
   const [products, setProducts] = useState<RecipeProduct[]>(recipe?.products ?? []);
   const queryClient = useQueryClient();
+
+  // The form renders at the top of the page; scroll there once it's in the DOM
+  // (scrolling before it renders gets undone when the inserted form shifts the page).
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
 
   const save = useMutation({
     mutationFn: () => {
